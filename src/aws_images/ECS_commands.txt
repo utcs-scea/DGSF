@@ -1,0 +1,56 @@
+aws ecr create-repository \
+    --repository-name dgsf \
+    --image-scanning-configuration scanOnPush=true \
+    --region us-east-1
+
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com
+
+
+When porting, check:
+
+
+if not IN_CONTAINER:
+IN_CONTAINER = "OPENFAAS" in os.environ.keys() or "AWS_LAMBDA_RUNTIME_API" in os.environ.keys()
+proc_env["AVA_CONFIG_FILE_PATH"] = "/home/app/ava.conf"
+
+
+
+## Testing
+docker run -p 9000:8080 facedet-dgsf-aws:latest
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+
+
+# Kmeans
+docker build -t kmeans-dgsf-aws --build-arg LOCAL_FUNC_DIR=./kmeans-dgsf -f ./template/Dockerfile .
+docker tag kmeans-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:kmeans
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:kmeans
+
+# Face det
+docker build -t facedet-dgsf-aws --build-arg LOCAL_FUNC_DIR=./facedet-dgsf -f ./template/Dockerfile .
+docker tag facedet-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:facedet
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:facedet
+
+# Covid 
+docker build -t covid-dgsf-aws --build-arg LOCAL_FUNC_DIR=./covid-dgsf -f ./template/Dockerfile .
+docker tag covid-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:covid
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:covid
+
+# Face id 
+docker build -t faceid-dgsf-aws --build-arg LOCAL_FUNC_DIR=./faceid-dgsf -f ./template/Dockerfile .
+docker tag faceid-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:faceid
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:faceid
+
+# bert
+docker build -t bert-dgsf-aws --build-arg LOCAL_FUNC_DIR=./bert-dgsf -f ./template/Dockerfile .
+docker tag bert-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:bert
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:bert
+
+# resnet
+docker build -t resnet-dgsf-aws --build-arg LOCAL_FUNC_DIR=./resnet-dgsf -f ./template/Dockerfile .
+docker tag resnet-dgsf-aws:latest YOUR PASSWORD HERE.dkr.ecr.us-east-1.amazonaws.com/dgsf:resnet
+docker push 629613830742.dkr.ecr.us-east-1.amazonaws.com/dgsf:resnet
+
+
+
+
+# create function on web console

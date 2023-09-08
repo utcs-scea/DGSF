@@ -1,0 +1,5 @@
+numpy==1.18.5
+boto3
+pycocotools
+dataclasses
+opencv-python-headless

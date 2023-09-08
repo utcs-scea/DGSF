@@ -1,0 +1,18 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build-tcp-server:
+    dir: "{{.COMMON_DIR}}/tcp_timeline"
+    cmds:
+      - make clean && make
+
+  run-tcp-server:
+    deps: [build-tcp-server]
+    desc: Launch server for communicating with N clients, pass parameter with -- <n>
+    dir: "{{.COMMON_DIR}}/tcp_timeline"
+    cmds:
+      - ./server_ex --n {{.CLI_ARGS}}

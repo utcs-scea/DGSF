@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 168960,
+        "good_items": 0,
+        "mean": 1176.7655061668222,
+        "percentiles": {
+            "50.0": 1172.900367981,
+            "80.0": 1889.3923762492002,
+            "90.0": 2121.4324777518004,
+            "95.0": 2236.7923738476497,
+            "99.0": 2328.42001864855,
+            "99.9": 2349.715855937
+        },
+        "qps": 71.8279018742197,
+        "took": 2352.289230108261,
+        "total_items": 168960
+    },
+    "cmdline": "Namespace(accuracy=False, backend='tensorflow', cache=0, count=None, data_format=None, dataset='imagenet', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/ILSVRC2012_img_val/', debug=False, find_peak_performance=False, inputs=['input_tensor:0'], max_batchsize=2, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/resnet50_v1.pb', model_name='resnet50', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/resnet50-gpu/tensorflow/Offline/ava', outputs=['ArgMax:0'], profile='resnet50-tf', qps=256, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "tensorflow",
+    "time": 1626198029,
+    "version": "1.14.1/unknown"
+}

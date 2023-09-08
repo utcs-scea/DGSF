@@ -1,0 +1,563 @@
+# https://taskfile.dev
+
+version: '3'
+
+env:
+  ROOT_DIR: {sh: "pwd"}
+  AVA_DIR: "{{.ROOT_DIR}}/vendor/ava"
+  COMMON_DIR: "{{.ROOT_DIR}}/src/common"
+  APPS_DIR: "{{.ROOT_DIR}}/src/apps"
+  TOOLS_DIR: "{{.ROOT_DIR}}/tools"
+  SERVERLESS_DIR: "{{.ROOT_DIR}}/serverless"
+  BUILD_DIR: "{{.ROOT_DIR}}/build"
+
+includes:
+  apps: src/apps
+  vec: src/apps/vectorsum
+  class-kmeans: src/apps/class_kmeans
+  faas-kmeans: src/apps/faas_kmeans
+  uniform-kmeans: src/apps/uniform_kmeans
+  serverless: serverless/
+  mlperf: src/apps/mlperf
+  covidct: src/apps/covidct
+  migration-test: src/apps/migration_test
+  get-attributes: src/apps/test_get_attributes
+
+tasks:
+  default: task --list
+
+  init:
+    cmds:
+      - git submodule update --init --recursive 
+      - mkdir -p {{.BUILD_DIR}}/ava {{.BUILD_DIR}}/serverless/images 
+    status:
+      - test -d {{.AVA_DIR}}
+      - test -d {{.BUILD_DIR}}/ava
+      - test -d {{.BUILD_DIR}}/serverless/images
+
+  ava-gen:
+    #running init often sucks since it detaches HEAD of ava
+    #deps: [init]
+    dir: "{{.AVA_DIR}}"
+    cmds:
+      - ./generate.py -s onnx_dump
+      - ./generate.py -O batching -s onnx_opt
+      #- ./generate.py -s onnx_opt
+      - ./scripts/check_cpp_format.sh -fix ./cava/onnx_dump_nw
+      - ./scripts/check_cpp_format.sh -fix ./cava/onnx_opt_nw
+    status:
+      - test -d "{{.AVA_DIR}}/cava/onnx_dump_nw"
+      - test -d "{{.AVA_DIR}}/cava/onnx_opt_nw"
+
+  build-ava:
+    deps: [ava-gen]
+    dir: "{{.AVA_DIR}}/{{.BUILD}}_build"
+    vars:
+      BUILDMODE: '{{default "-DCMAKE_BUILD_TYPE=Debug" .BUILDMODE}}'
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      - cp {{.SERVERLESS_DIR}}/backend/pb/resmngr/resmngr.proto {{.AVA_DIR}}/worker/serverless_gpu/pb/
+      - cmake {{.BUILDMODE}} -DAVA_GEN_ONNXRT_DUMP_SPEC=ON -DAVA_GEN_ONNXRT_OPT_SPEC=ON -DAVA_MANAGER_SVGPU=ON ..
+      - make -j16
+      - make install
+      - task: install-ava
+        vars: {BUILD: "{{.BUILD}}"}
+    #TODO: this might not be reliable
+    status:
+      - test -f "{{.BUILD_DIR}}/ava/{{.BUILD}}/svgpu_manager"
+      - test -f "{{.BUILD_DIR}}/ava/{{.BUILD}}/onnx_dump/lib/libguestlib.so"
+      - test -f "{{.BUILD_DIR}}/ava/{{.BUILD}}/onnx_opt/lib/libguestlib.so"
+
+  build-ava-debug:
+    desc: Builds ava with debug stuff.
+    cmds: 
+      - task: build-ava
+
+  build-ava-release:
+    desc: Builds the ava cudart guestlib and the serverless GPU manager without debug.
+    cmds:
+      - task: build-ava
+        vars: {BUILDMODE: "-DCMAKE_BUILD_TYPE=Release", BUILD: "release"}
+
+  install-ava:
+    dir: "{{.BUILD_DIR}}/ava/{{.BUILD}}"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      - rm -rf {{.BUILD_DIR}}/ava/{{.BUILD}}/*
+      - cp {{.AVA_DIR}}/"{{.BUILD}}_build"/install/bin/svgpu_manager .
+      - task: install-ava-spec-bin
+        vars: {SPEC: "onnx_dump", BUILD: "{{.BUILD}}"}
+      - task: install-ava-spec-bin
+        vars: {SPEC: "onnx_opt", BUILD: "{{.BUILD}}"}
+
+  install-ava-spec-bin:
+    dir: "{{.BUILD_DIR}}/ava/{{.BUILD}}"
+    vars:
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      - mkdir -p ./"{{.SPEC}}"/
+      - cp -r {{.AVA_DIR}}/"{{.BUILD}}_build"/install/"{{.SPEC}}"/lib/ ./"{{.SPEC}}"/
+      - cp -r {{.AVA_DIR}}/"{{.BUILD}}_build"/install/"{{.SPEC}}"/bin/ ./"{{.SPEC}}"/
+      - cd ./"{{.SPEC}}" && ln -sf lib lib64
+      # deal with nvvm
+      - mkdir -p ./"{{.SPEC}}"/nvvm/lib64
+      - mkdir -p ./"{{.SPEC}}"/nvvm/libdevice
+      #- cp /usr/local/cuda-10.2/nvvm/libdevice/libdevice.10.bc ./"{{.SPEC}}"/nvvm/libdevice
+      - cp /usr/local/cuda/nvvm/libdevice/libdevice.10.bc ./"{{.SPEC}}"/nvvm/libdevice
+      - cd {{.SPEC}}/nvvm/lib64 &&
+        ln -sf ../../lib/libguestlib.so libnvvm.so &&
+        ln -sf ../../lib/libguestlib.so libnvvm.so.3 &&
+        ln -sf ../../lib/libguestlib.so libnvvm.so.3.3.0
+  
+  gdb-svgpu-manager:
+    deps: [build-ava]
+    vars:
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      BUILD: '{{default "debug" .BUILD}}'
+      WORKER_PORT_BASE: '{{default "5200" .WORKER_PORT_BASE}}'
+      MANAGER_PORT_BASE: '{{default "50043" .MANAGER_PORT_BASE}}'
+    dir: "{{.BUILD_DIR}}/ava/{{.BUILD}}"
+    desc: Launches the svgpu manager with default arguments. Pass number of GPUS to use by -- <n>
+    cmds:
+      - gdb --args ./svgpu_manager
+        --worker_path ./{{.SPEC}}/bin/worker
+        --manager_port {{.MANAGER_PORT_BASE}}
+        --worker_port_base {{.WORKER_PORT_BASE}}
+        --worker_env LD_LIBRARY_PATH=/usr/local/cuda/nvvm/lib64
+        --ngpus 2
+        --gpuoffset 0
+        --allctx yes
+        --reporting yes
+        --debug_migration 3 2>&1
+    
+  run-svgpu-manager-dump:
+    deps: [build-ava]
+    vars:
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      BUILD: '{{default "release" .BUILD}}'
+      WORKER_PORT_BASE: '{{default "5200" .WORKER_PORT_BASE}}'
+      MANAGER_PORT_BASE: '{{default "50043" .MANAGER_PORT_BASE}}'
+    dir: "{{.BUILD_DIR}}/ava/{{.BUILD}}"
+    desc: Launches the svgpu manager with default arguments. Pass number of GPUS to use by -- <n>
+    cmds:
+      - echo "$(pwd)"
+      - ./svgpu_manager
+        --worker_path ./{{.SPEC}}/bin/worker
+        --manager_port {{.MANAGER_PORT_BASE}}
+        --worker_port_base {{.WORKER_PORT_BASE}}
+        --worker_env LD_LIBRARY_PATH=/usr/local/cuda/nvvm/lib64
+        --ngpus {{.CLI_ARGS}}
+
+  run-svgpu-manager-dump-debug:
+    deps: [build-ava-debug]
+    desc: Launches the svgpu manager with default arguments. Pass number of GPUS to use by -- <n>
+    vars:
+      WORKER_PORT_BASE: '{{default "5200" .WORKER_PORT_BASE}}'
+      MANAGER_PORT_BASE: '{{default "50043" .MANAGER_PORT_BASE}}'
+    cmds:
+      - echo "$(pwd)"
+      - task: run-svgpu-manager-dump
+        vars:
+          BUILD: "debug"
+          WORKER_PORT_BASE: "{{.WORKER_PORT_BASE}}"
+          MANAGER_PORT_BASE: "{{.MANAGER_PORT_BASE}}"
+
+  run-svgpu-manager-opt:
+    deps: [build-ava]
+    desc: Launches the svgpu manager with default arguments. Pass number of GPUS to use by -- <n>
+    vars:
+      WORKER_PORT_BASE: '{{default "5200" .WORKER_PORT_BASE}}'
+      MANAGER_PORT_BASE: '{{default "50043" .MANAGER_PORT_BASE}}'
+    cmds:
+      - echo "$(pwd)"
+      - task: run-svgpu-manager-dump
+        vars:
+          SPEC: "onnx_opt"
+          BUILD: "release"
+          WORKER_PORT_BASE: "{{.WORKER_PORT_BASE}}"
+          MANAGER_PORT_BASE: "{{.MANAGER_PORT_BASE}}"
+
+  run-svgpu-manager-opt-debug:
+    deps: [build-ava-debug]
+    desc: Launches the svgpu manager with default arguments. Pass number of GPUS to use by -- <n>
+    vars:
+      WORKER_PORT_BASE: '{{default "5200" .WORKER_PORT_BASE}}'
+      MANAGER_PORT_BASE: '{{default "50043" .MANAGER_PORT_BASE}}'
+    cmds:
+      - task: run-svgpu-manager-dump
+        vars:
+          SPEC: "onnx_opt"
+          BUILD: "debug"
+          WORKER_PORT_BASE: "{{.WORKER_PORT_BASE}}"
+          MANAGER_PORT_BASE: "{{.MANAGER_PORT_BASE}}"
+
+  build-ava-container:
+    dir: "{{.AVA_DIR}}/tools/docker"
+    cmds:
+      - make ava-cuda-10.1	
+
+  build-container:
+    desc: Builds our development container.
+    deps: [build-ava-container]
+    dir: tools/containers 
+    cmds:
+      - docker build --ssh default --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) 
+        -t svgpu-ava-10.1-dev . -f svgpu-ava-10.1-dev.Dockerfile
+
+  run-container:
+    deps: [build-container]
+    desc: Builds and launches our dev container.
+    cmds:
+      - $TOOLS_DIR/containers/run_docker.sh svgpu-ava-10.1-dev
+
+  build-ava-container102:
+    dir: "tools/containers/ava"
+    cmds:
+      - make ava-cuda-10.2
+
+  build-container102:
+    desc: Builds our development container.
+    deps: [build-ava-container102]
+    dir: tools/containers 
+    cmds:
+      - docker build --ssh default --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) 
+        -t svgpu-ava-10.2-dev . -f svgpu-ava-10.2-dev.Dockerfile
+
+  run-container102:
+    deps: [build-container102]
+    desc: Builds and launches our dev container.
+    cmds:
+      - $TOOLS_DIR/containers/run_docker.sh svgpu-ava-10.2-dev
+
+  build-container-host:
+    dir: "tools/containers"
+    cmds:
+      - docker build --ssh default --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) 
+        -t svgpu-host . -f svgpu-host-dev.Dockerfile
+
+  run-container-host:
+    deps: [build-container-host]
+    desc: Builds and launches our dev container.
+    cmds:
+      - $TOOLS_DIR/containers/run_docker_nogpu.sh svgpu-host
+
+  build-onnxruntime:
+    desc: Builds onnxruntime
+    dir: "{{.ROOT_DIR}}/vendor/onnxruntime"
+    cmds:
+      - ./build.sh --config RelWithDebInfo --parallel --build_wheel
+        --use_cuda --cuda_home /usr/local/cuda-10.1
+        --cudnn_home /usr/local/cuda-10.1 --skip_tests
+      - mkdir -p {{.BUILD_DIR}}/onnxruntime/build
+      - cp build/Linux/Release/dist/onnxruntime_gpu-1.8.0-cp36-cp36m-linux_x86_64.whl {{.BUILD_DIR}}/onnxruntime/build
+
+  download-onnxruntime:
+    desc: Download prebuilt cuda enabled onnxruntime with ava modification
+    dir : "{{.BUILD_DIR}}/onnxruntime/prebuilt"
+    cmds:
+      - wget https://github.com/photoszzt/onnxruntime/releases/download/ava-r1.8.0/onnxruntime_gpu-1.8.0-cp36-cp36m-linux_x86_64.whl
+    status:
+      - test -f "{{.BUILD_DIR}}/onnxruntime/prebuilt/onnxruntime_gpu-1.8.0-cp36-cp36m-linux_x86_64.whl"
+
+  build-pytorch:
+    desc: Builds pytorch
+    dir: "{{.ROOT_DIR}}/vendor/pytorch"
+    cmds:
+      - python3 -m pip install astunparse pyyaml mkl mkl-include cffi typing_extensions future six requests dataclasses
+      - cd /home/ubuntu/.local/lib/
+        && ln -sf libmkl_avx.so.1 libmkl_avx.so
+        && ln -sf libmkl_avx2.so.1 libmkl_avx2.so
+        && ln -sf libmkl_avx512.so.1 libmkl_avx512.so
+        && ln -sf libmkl_avx512_mic.so.1 libmkl_avx512_mic.so
+        && ln -sf libmkl_blacs_intelmpi_ilp64.so.1 libmkl_blacs_intelmpi_ilp64.so
+        && ln -sf libmkl_blacs_intelmpi_lp64.so.1 libmkl_blacs_intelmpi_lp64.so
+        && ln -sf libmkl_blacs_openmpi_ilp64.so.1 libmkl_blacs_openmpi_ilp64.so
+        && ln -sf libmkl_blacs_openmpi_lp64.so.1 libmkl_blacs_openmpi_lp64.so
+        && ln -sf libmkl_blacs_sgimpt_ilp64.so.1 libmkl_blacs_sgimpt_ilp64.so
+        && ln -sf libmkl_blacs_sgimpt_lp64.so.1 libmkl_blacs_sgimpt_lp64.so
+        && ln -sf libmkl_cdft_core.so.1 libmkl_cdft_core.so
+        && ln -sf libmkl_core.so.1 libmkl_core.so
+        && ln -sf libmkl_def.so.1 libmkl_def.so
+        && ln -sf libmkl_gf_ilp64.so.1 libmkl_gf_ilp64.so
+        && ln -sf libmkl_gf_lp64.so.1 libmkl_gf_lp64.so
+        && ln -sf libmkl_gnu_thread.so.1 libmkl_gnu_thread.so
+        && ln -sf libmkl_intel_ilp64.so.1 libmkl_intel_ilp64.so
+        && ln -sf libmkl_intel_lp64.so.1 libmkl_intel_lp64.so
+        && ln -sf libmkl_intel_thread.so.1 libmkl_intel_thread.so
+        && ln -sf libmkl_mc.so.1 libmkl_mc.so
+        && ln -sf libmkl_mc3.so.1 libmkl_mc3.so
+        && ln -sf libmkl_pgi_thread.so.1 libmkl_pgi_thread.so
+        && ln -sf libmkl_rt.so.1 libmkl_rt.so
+        && ln -sf libmkl_scalapack_ilp64.so.1 libmkl_scalapack_ilp64.so
+        && ln -sf libmkl_scalapack_lp64.so.1 libmkl_scalapack_lp64.so
+        && ln -sf libmkl_sequential.so.1 libmkl_sequential.so
+        && ln -sf libmkl_tbb_thread.so.1 libmkl_tbb_thread.so
+        && ln -sf libmkl_vml_avx.so.1 libmkl_vml_avx.so
+        && ln -sf libmkl_vml_avx2.so.1 libmkl_vml_avx2.so
+        && ln -sf libmkl_vml_avx512.so.1 libmkl_vml_avx512.so
+        && ln -sf libmkl_vml_avx512_mic.so.1 libmkl_vml_avx512_mic.so
+        && ln -sf libmkl_vml_cmpt.so.1 libmkl_vml_cmpt.so
+        && ln -sf libmkl_vml_def.so.1 libmkl_vml_def.so
+        && ln -sf libmkl_vml_mc.so.1 libmkl_vml_mc.so
+        && ln -sf libmkl_vml_mc2.so.1 libmkl_vml_mc2.so
+        && ln -sf libmkl_vml_mc3.so.1 libmkl_vml_mc3.so
+      - export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-"/home/ubuntu/.local/lib"}
+      - BLAS=MKL python3 setup.py bdist_wheel
+      - mkdir -p {{.BUILD_DIR}}/pytorch/build
+      - cp dist/torch-1.9.0a0+gitd69c22d-cp36-cp36m-linux_x86_64.whl {{.BUILD_DIR}}/pytorch/build
+    status:
+      - test -f {{.BUILD_DIR}}/pytorch/build/torch-1.9.0a0+gitd69c22d-cp36-cp36m-linux_x86_64.whl
+
+  install-torchvision-deps:
+    cmds:
+      - CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
+      - sudo pip3 install --prefix=/opt/intel/ipp ipp-devel
+      - pip3 install git+https://github.com/pytorch/accimage
+
+  build-torchvision:
+    deps: [install-torchvision-deps]
+    desc: Builds torch vision
+    dir: "{{.ROOT_DIR}}/vendor/vision"
+    cmds:
+      - python3 setup.py bdist_wheel
+      - mkdir -p {{.BUILD_DIR}}/vision/build
+      - cp dist/torchvision-0.10.0a0+300a8a4-cp36-cp36m-linux_x86_64.whl {{.BUILD}}/vision/build
+    status:
+      - test -f {{.BUILD_DIR}}/vision/build/torchvision-0.10.0a0+300a8a4-cp36-cp36m-linux_x86_64.whl
+
+  build-tensorflow:
+    desc: Builds tensorflow
+    dir: "{{.ROOT_DIR}}/vendor/tensorflow"
+    cmds:
+      - python3 -m pip install -U --user keras_preprocessing --no-deps
+      - TF_NEED_OPENCL=0 TF_NEED_CUDA=1 TF_CUDA_COMPUTE_CAPABILITIES=3.5,7.0
+        TF_CUDA_VERSION=10.1 TF_CUDA_CLANG=0 TF_NEED_TENSORRT=0 TF_NEED_ROCM=0
+        TF_CUDNN_VERSION=7 TF_CUDA_PATH=/usr/local/cuda-10.1/ TF_NEED_OPENCL_SYCL=0
+        TF_SET_ANDROID_WORKSPACE=0 GCC_HOST_COMPILER_PATH=$(which gcc) PYTHON_BIN_PATH=$(which python3)
+        PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.USER_SITE);')" ./configure
+      - bazel build --verbose_failures --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=mkl
+        --config=cuda --config noaws --config nogcp --config nohdfs //tensorflow/tools/pip_package:build_pip_package
+      - ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+      - mkdir -p {{.BUILD_DIR}}/tensorflow/build
+      - mv /tmp/tensorflow_pkg/*.whl {{.BUILD_DIR}}/tensorflow/build
+
+  build-tensorflow-cudart-dynam:
+    desc: Builds tensorflow cudart dynam
+    dir: "{{.ROOT_DIR}}/vendor/tensorflow-cudart-dynam"
+    cmds:
+      - python3 -m pip install -U keras_preprocessing --no-deps
+      - python3 -m pip install numpy==1.18.5
+      - USE_BAZEL_VERSION=0.26.1 TF_NEED_OPENCL=0 TF_NEED_CUDA=1 TF_CUDA_COMPUTE_CAPABILITIES=3.5,7.0
+        TF_CUDA_VERSION=10.1 TF_CUDA_CLANG=0 TF_NEED_TENSORRT=0 TF_NEED_ROCM=0
+        TF_CUDNN_VERSION=7 TF_CUDA_PATH=/usr/local/cuda-10.1/ TF_NEED_OPENCL_SYCL=0
+        TF_SET_ANDROID_WORKSPACE=0 GCC_HOST_COMPILER_PATH=$(which gcc) PYTHON_BIN_PATH=$(which python3)
+        PYTHON_LIB_PATH="$(python3 -c 'import site; print(site.USER_SITE);')" ./configure
+      - USE_BAZEL_VERSION=0.26.1 bazel build --verbose_failures --copt=-mavx --copt=-mavx2 --copt=-mfma
+        --copt=-msse4.2 --copt=-mfpmath=both --config=mkl --config=cuda --config=noaws --config=nogcp
+        --config=nohdfs --config=noignite --config=nokafka --linkopt="-lrt" //tensorflow/tools/pip_package:build_pip_package
+      - ./bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_cudart_dynam_pkg
+      - mkdir -p {{.BUILD_DIR}}/tensorflow-cudart-dynam/build
+      - mv /tmp/tensorflow_cudart_dynam_pkg/*.whl {{.BUILD_DIR}}/tensorflow-cudart-dynam/build
+    status:
+      - test -f {{.BUILD_DIR}}/tensorflow-cudart-dynam/build/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl
+
+  test-tensorflow-cuda-dynam-core:
+    dir: "{{.ROOT_DIR}}/vendor/tensorflow-cudart-dynam"
+    cmds:
+      - USE_BAZEL_VERSION=0.26.1 bazel test --incompatible_depset_union=false --verbose_failures
+        --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=mkl
+        --config=cuda --config=noaws --config=nogcp --config=nohdfs --config=noignite --config=nokafka
+        --linkopt="-lrt" --jobs 1 //tensorflow/core/...
+
+  test-tensorflow-cuda-dynam-python:
+    dir: "{{.ROOT_DIR}}/vendor/tensorflow-cudart-dynam"
+    cmds:
+      - USE_BAZEL_VERSION=0.26.1 bazel test --incompatible_depset_union=false --verbose_failures
+        --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=mkl
+        --config=cuda --config noaws --config nogcp --config nohdfs --config noignite --config nokafka
+        --linkopt="-lrt" --jobs 1 //tensorflow/python/...
+
+  test-tensorflow-cuda-dynam-ava:
+    dir: "{{.ROOT_DIR}}/vendor/tensorflow-cudart-dynam"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        USE_BAZEL_VERSION=0.26.1 bazel test --incompatible_depset_union=false --verbose_failures
+        --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=mkl
+        --config=cuda --config noaws --config nogcp --config nohdfs --config noignite --config nokafka
+        --linkopt="-lrt" //tensorflow/core/...
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        USE_BAZEL_VERSION=0.26.1 bazel test --incompatible_depset_union=false --verbose_failures
+        --copt=-mavx --copt=-mavx2 --copt=-mfma --copt=-msse4.2 --copt=-mfpmath=both --config=mkl
+        --config=cuda --config noaws --config nogcp --config nohdfs --config noignite --config nokafka
+        --linkopt="-lrt" //tensorflow/python/...
+
+  download-tensorflow-cudart-dynam:
+    desc: Download tensorflow-cudart-dynam build
+    dir: "{{.BUILD_DIR}}/tensorflow-cudart-dynam/prebuilt"
+    cmds:
+      #this is wrong, need to download s3 hf-dgsf/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl
+      - wget -O tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl https://github.com/photoszzt/tensorflow-cudart-dynam/releases/download/ava-r1.14/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl
+    status:
+      - test -f "{{.BUILD_DIR}}/tensorflow-cudart-dynam/prebuilt/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl"
+
+  download-pytorch:
+    desc: Download pytorch build
+    dir: "{{.BUILD_DIR}}/pytorch/prebuilt"
+    cmds:
+      - wget -O torch-1.9.0a0+gitd69c22d-cp36-cp36m-linux_x86_64.whl https://github.com/photoszzt/pytorch/releases/download/ava-r1.9.0/torch-1.9.0a0+gitd69c22d-cp36-cp36m-linux_x86_64.whl
+    status:
+      - test -f "{{.BUILD_DIR}}/pytorch/prebuilt/torch-1.9.0a0+gitd69c22d-cp36-cp36m-linux_x86_64.whl"
+
+  download-torchvision:
+    desc: Download torchvision
+    dir: "{{.BUILD_DIR}}/pytorch/prebuilt"
+    cmds:
+      - wget -O torchvision-0.10.0a0+300a8a4-cp36-cp36m-linux_x86_64.whl https://github.com/photoszzt/vision/releases/download/ava-r0.10.0/torchvision-0.10.0a0+300a8a4-cp36-cp36m-linux_x86_64.whl
+    status:
+      - test -f "{{.BUILD_DIR}}/pytorch/prebuilt/torchvision-0.10.0a0+300a8a4-cp36-cp36m-linux_x86_64.whl"
+
+  build-cupy:
+    dir: "{{.ROOT_DIR}}/vendor/cupy"
+    cmds:
+      #- apt-get install -y libcutensor1 libcutensor-dev
+      - CFLAGS="-I/usr/local/cuda-10.1/include" LDFLAGS="-L/usr/local/cuda-10.1/lib64" python3 setup.py bdist_wheel
+
+  cupyx-tests-ava:
+    dir: "{{.ROOT_DIR}}/vendor/cupy/tests"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - CUPY_TEST_GPU_LIMIT=1 AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        python3 -m pytest cupyx_tests
+
+  cupy-tests-ava:
+    dir: "{{.ROOT_DIR}}/vendor/cupy/tests"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - CUPY_TEST_GPU_LIMIT=1 AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        python3 -m pytest cupy_tests
+
+  cupy-example-tests-ava:
+    dir: "{{.ROOT_DIR}}/vendor/cupy/tests"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - CUPY_TEST_GPU_LIMIT=1 AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        python3 -m pytest example_tests
+
+  build-faas-classification-detection:
+    desc: "build faas classification and detection function"
+    deps: [download-onnxruntime, mlperf:postprocess-resnet50-onnx]
+    cmds:
+      - task: serverless:build-app-image
+        vars:
+          CLI_ARGS: "faas_classification_detection --size 34G"
+
+  build-faas-bert:
+    desc: "build faas bert function"
+    deps: [download-onnxruntime, mlperf:postprocess-onnx-bert-model, apps:create-eval-features]
+    cmds:
+      - task: serverless:build-app-image
+        vars:
+          CLI_ARGS: "faas_bert --size 4G"
+
+  build-faas-face-det:
+    desc: "build faas face detection function"
+    deps: [download-onnxruntime, apps:postprocess-face-det-onnx-model, 
+           apps:download-widerface]
+    cmds:
+      - task: serverless:build-app-image
+        vars:
+          CLI_ARGS: "faas_face_det --size 3G"
+
+  build-faas-face-id:
+    desc: "build faas face identification function"
+    deps: [download-onnxruntime, apps:extract-lfw-faces]
+    cmds:
+      - task: serverless:build-app-image
+        vars:
+          CLI_ARGS: "faas_face_id --size 3G"
+
+  build-zoom-kernel:
+    cmds:
+      - cd {{.APPS_DIR}}/covidct/refactored && make && sudo cp zoom_kernel.cubin /cuda_dumps
+
+  build-faas-covidct:
+    desc: "build faas covid detection function"
+    deps: [download-tensorflow-cudart-dynam, covidct:download-dataset, covidct:download-dataset, covidct:extract-npy]
+    cmds:
+      - task: serverless:build-app-image
+        vars:
+          CLI_ARGS: "faas_covidct --size 10G"
+
+  build-opencv:
+    dir: "{{.ROOT_DIR}}/vendor/"
+    cmds:
+      - if ![ -d opencv-python ]; then git clone --recursive https://github.com/photoszzt/opencv-python.git; fi
+      - cd opencv-python && git checkout tags/56
+      - sudo apt install -y libpng-dev libjpeg-dev ninja-build libopenblas-dev
+      - cd opencv-python && ENABLE_HEADLESS=1 ENABLE_CONTRIB=1 CMAKE_ARGS="-DWITH_CUDA=ON"
+        python3 -m pip wheel . --verbose
+
+  test-malloc:
+    dir: "{{.APPS_DIR}}/malloc"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - make
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        ./minimal
+
+  test-malloc-opt:
+    dir: "{{.APPS_DIR}}/malloc"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+    cmds:
+      - make
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        ./minimal
+
+  test-micromig:
+    dir: "{{.APPS_DIR}}/malloc"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - make
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        ./migration_bench 16
+
+  test-micromig-opt:
+    dir: "{{.APPS_DIR}}/malloc"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+    cmds:
+      - make
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        ./migration_bench 16
+
+  run-faas-functions:
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./launch_faas_functions.py

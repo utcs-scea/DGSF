@@ -1,0 +1,31 @@
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt install -y gosu sudo locales
+
+RUN find /root -type f -print0 | xargs -0 chmod 666 \
+      && find /root -type d -print0 | xargs -0 chmod 777
+RUN echo "export PS1='\\W$ '" >> /root/.bashrc
+ENV HOME=/root
+# Yes, allow anyone to run as root with gosu
+RUN chmod gu+s `which gosu`
+
+#install ava deps
+COPY install_dependencies.sh /tmp
+RUN /tmp/install_dependencies.sh
+
+# add nvvm to LD_LIBRARY_PATH
+RUN echo /usr/local/cuda-10.2/nvvm/lib64 > /etc/ld.so.conf.d/nvvm.conf && ldconfig
+
+# Set the locale
+RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
+    locale-gen
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+
+VOLUME /root/.ccache
+VOLUME /source
+WORKDIR /source
+
+CMD ["bash"]

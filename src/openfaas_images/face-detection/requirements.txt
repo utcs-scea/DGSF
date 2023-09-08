@@ -1,0 +1,5 @@
+setuptools
+boto3
+numpy==1.18.5
+cython
+opencv-python-headless

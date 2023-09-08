@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 24576,
+        "good_items": 0,
+        "mean": 257.1425678120573,
+        "percentiles": {
+            "50.0": 259.867181335,
+            "80.0": 407.30107622,
+            "90.0": 454.25888647,
+            "95.0": 477.943193766,
+            "99.0": 497.517320039,
+            "99.9": 502.391172203
+        },
+        "qps": 48.882647742307654,
+        "took": 502.755090713501,
+        "total_items": 24576
+    },
+    "cmdline": "Namespace(accuracy=False, backend='tensorflow', cache=0, count=None, data_format=None, dataset='coco-300', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/coco-300/', debug=False, find_peak_performance=False, in_dtypes='uint8', inputs=['image_tensor:0'], max_batchsize=16, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb', model_name='ssd-mobilenet', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/ssd-mobilenet-gpu/tensorflow/Offline/local', outputs=['num_detections:0', 'detection_boxes:0', 'detection_scores:0', 'detection_classes:0'], profile='ssd-mobilenet-tf', qps=1, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "tensorflow",
+    "time": 1626637450,
+    "version": "1.14.1/unknown"
+}

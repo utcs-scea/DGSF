@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 24576,
+        "good_items": 0,
+        "mean": 918.9155757543413,
+        "percentiles": {
+            "50.0": 919.0085919675,
+            "80.0": 1469.871006095,
+            "90.0": 1653.6652753725,
+            "95.0": 1745.2870986335001,
+            "99.0": 1818.6472471724999,
+            "99.9": 1835.1067884811252
+        },
+        "qps": 13.378592054542754,
+        "took": 1836.9645998477936,
+        "total_items": 24576
+    },
+    "cmdline": "Namespace(accuracy=False, backend='onnxruntime', cache=0, count=None, data_format='NCHW', dataset='coco-1200-onnx', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/coco-1200/', debug=False, find_peak_performance=False, inputs=['image'], max_batchsize=1, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/resnet34-ssd1200.onnx', model_name='ssd-resnet34', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/ssd-resnet34-gpu/onnxruntime/Offline/local', outputs=['bboxes', 'labels', 'scores'], profile='ssd-resnet34-onnxruntime', qps=None, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "onnxruntime",
+    "time": 1625509098,
+    "version": "1.8.0"
+}

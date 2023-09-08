@@ -1,0 +1,8 @@
+boto3
+scikit-image==0.17.2
+keras==2.2.5
+h5py<3.0.0
+cucim==21.6.0
+cupy-cuda101==9.2.0
+pydicom==2.1.2
+python-gdcm

@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 337920,
+        "good_items": 0,
+        "mean": 207.91337380983146,
+        "percentiles": {
+            "50.0": 207.776211322,
+            "80.0": 331.531820038001,
+            "90.0": 372.48020757790266,
+            "95.0": 392.88574850369906,
+            "99.0": 409.070434196,
+            "99.9": 412.598889662
+        },
+        "qps": 817.5936843166329,
+        "took": 413.31043338775635,
+        "total_items": 337920
+    },
+    "cmdline": "Namespace(accuracy=False, backend='onnxruntime', cache=0, count=None, data_format=None, dataset='imagenet', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/ILSVRC2012_img_val/', debug=False, find_peak_performance=False, inputs=None, max_batchsize=64, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/resnet50_v1.onnx', model_name='resnet50', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/resnet50-gpu/onnxruntime/Offline/local', outputs=['ArgMax:0'], profile='resnet50-onnxruntime', qps=512, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "onnxruntime",
+    "time": 1625428033,
+    "version": "1.8.0"
+}

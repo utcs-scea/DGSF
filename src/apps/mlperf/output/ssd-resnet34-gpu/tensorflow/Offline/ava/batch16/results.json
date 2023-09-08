@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 1024,
+        "good_items": 0,
+        "mean": 246.26738699142186,
+        "percentiles": {
+            "50.0": 245.958836376,
+            "80.0": 393.924344272,
+            "90.0": 439.206795515,
+            "95.0": 462.282294241,
+            "99.0": 484.706795529,
+            "99.9": 484.706795529
+        },
+        "qps": 2.1124367132504003,
+        "took": 484.7482500076294,
+        "total_items": 1024
+    },
+    "cmdline": "Namespace(accuracy=False, backend='tensorflow', cache=0, count=1024, data_format='NCHW', dataset='coco-1200-tf', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/coco-1200-tf/', debug=False, find_peak_performance=False, in_dtypes='float32', inputs=['image:0'], max_batchsize=16, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb', model_name='ssd-resnet34', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/ssd-resnet34-gpu/tensorflow/Offline/ava', outputs=['detection_bboxes:0', 'detection_classes:0', 'detection_scores:0'], profile='ssd-resnet34-tf', qps=1, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "tensorflow",
+    "time": 1626657266,
+    "version": "1.14.1/unknown"
+}

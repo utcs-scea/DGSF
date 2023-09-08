@@ -1,0 +1,81 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build_kmeans:
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - pwd
+      - make indocker
+
+  run-ava:
+    desc: Launch kmeans with ava remoting
+#    deps: [build_kmeans]
+    dir: "{{.APPS_DIR}}/faas_kmeans"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        AVA_WORKER_DUMP_DIR={{.APPS_DIR}}/faas_kmeans/cuda_dumps
+        AVA_GUEST_DUMP_DIR={{.APPS_DIR}}/faas_kmeans/cuda_dumps
+        AVA_REQUESTED_GPU_MEMORY=123456789
+        ./kmeans -k 16 -i inputs/1000000p-10d.txt -d 10 -g -bench -m 2000 -t 0 -r 1
+
+  run-ava-dump-debug:
+    dir: "{{.APPS_DIR}}/faas_kmeans"
+    cmds:
+      - task: run-ava
+        vars: {BUILD: "debug"}
+
+  run-ava-opt:
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt"}
+
+  run-ava-opt-debug:
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt", BUILD: "debug"}
+
+  run-local:
+    desc: Launch kmeans locally, just for testing
+#    deps: [build_kmeans]
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - ./kmeans -k 16 -i inputs/small.txt -d 10 -g -bench -m 1000 -t 0.0001
+     
+  run-multiple:
+    deps: [build_kmeans]
+    desc: Launch N kmeans with ava remoting, pass parameter by appending -- <n>
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH=$AVA_DIR/build/install/onnx_dump/lib
+        $TOOLS_DIR/benchmarking/launch_n_processes.py {{.CLI_ARGS}} 
+        ./kmeans -k 16 -b -i inputs/color17695.bin
+
+  run-benchmark:
+#    deps: [build_kmeans]
+    desc: Runs the full benchmark. Check the python file in tools/benchmarking for settings.
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./benchmark_simple.py
+        AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/release/onnx_opt/lib
+        -cmd {{.APPS_DIR}}/kmeans/kmeans -k 16 -i {{.APPS_DIR}}/kmeans/inputs/10000000p-10d.txt -g -s 8675309 -t 0.0001 -bench -m 1000 -d 10
+
+  run-baseline:
+#    deps: [build_kmeans]
+    desc: Runs the full benchmark. Check the python file in tools/benchmarking for settings.
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./baseline_benchmark.py
+        CUDA_VISIBLE_DEVICES=3
+        -cmd {{.APPS_DIR}}/kmeans/kmeans -k 16 -i {{.APPS_DIR}}/kmeans/inputs/10000000p-10d.txt -g -s 8675309 -t 0.0001 -bench -m 1000 -d 10

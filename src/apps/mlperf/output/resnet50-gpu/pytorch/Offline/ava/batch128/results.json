@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 24576,
+        "good_items": 0,
+        "mean": 36.1305664245625,
+        "percentiles": {
+            "50.0": 36.165191898,
+            "80.0": 57.021522885,
+            "90.0": 63.786120532,
+            "95.0": 67.512400912,
+            "99.0": 70.515392639,
+            "99.9": 70.879907385
+        },
+        "qps": 346.48770325340917,
+        "took": 70.92892408370972,
+        "total_items": 24576
+    },
+    "cmdline": "Namespace(accuracy=False, backend='pytorch', cache=0, count=None, data_format=None, dataset='imagenet', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/ILSVRC2012_img_val/', debug=False, find_peak_performance=False, inputs=None, max_batchsize=128, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/resnet50_v1.onnx', model_name='resnet50', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/resnet50-gpu/pytorch/Offline/ava', outputs=['ArgMax:0'], profile='resnet50-onnxruntime', qps=16, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "pytorch",
+    "time": 1626118535,
+    "version": "1.9.0a0+gitd69c22d"
+}

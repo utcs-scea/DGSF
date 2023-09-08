@@ -1,0 +1,22 @@
+{
+    "TestScenario.Offline": {
+        "count": 660,
+        "good_items": 0,
+        "mean": 594.9799337517696,
+        "percentiles": {
+            "50.0": 605.071806298,
+            "80.0": 934.697845427,
+            "90.0": 1044.36187469,
+            "95.0": 1099.686918992,
+            "99.0": 1134.80557465,
+            "99.9": 1134.80557465
+        },
+        "qps": 0.5815864110242867,
+        "took": 1134.827065229416,
+        "total_items": 660
+    },
+    "cmdline": "Namespace(accuracy=False, backend='onnxruntime', cache=0, count=256, data_format='NHWC', dataset='coco-300', dataset_list=None, dataset_path='/home/ubuntu/serverless-gpus/src/apps/mlperf/data/coco-300/', debug=False, find_peak_performance=False, inputs=None, max_batchsize=32, max_latency=None, mlperf_conf='../../mlperf.conf', model='/home/ubuntu/serverless-gpus/src/apps/mlperf/models/ssd_mobilenet_v1_coco_2018_01_28.onnx', model_name='ssd-mobilenet', output='/home/ubuntu/serverless-gpus/src/apps/mlperf/output/ssd-mobilenet-gpu/onnxruntime/Offline/ava', outputs=['num_detections:0', 'detection_boxes:0', 'detection_scores:0', 'detection_classes:0'], profile='ssd-mobilenet-onnxruntime', qps=1, samples_per_query=None, scenario='Offline', threads=1, time=None, user_conf='user.conf')",
+    "runtime": "onnxruntime",
+    "time": 1625681347,
+    "version": "1.8.0"
+}

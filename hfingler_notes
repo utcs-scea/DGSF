@@ -1,0 +1,287 @@
+##
+#
+#   These notes might not be up to date, especially the ones closer to the end
+#
+##
+
+export SELF_IP=172.31.76.36
+task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+
+High load:
+
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --precreated_workers 1 --scheduler worstfit
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --precreated_workers 2 --scheduler worstfit
+
+Low Load:
+
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --precreated_workers 1 --scheduler worstfit
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --precreated_workers 2 --scheduler worstfit
+task run-svgpu-manager-opt -- 3 --keepworkeralive yes --precreated_workers 1 --scheduler worstfit
+task run-svgpu-manager-opt -- 3 --keepworkeralive yes --precreated_workers 2 --scheduler worstfit
+
+task run-svgpu-manager-opt-debug -- 2 --keepworkeralive yes
+task run-svgpu-manager-opt-debug -- 2 --keepworkeralive yes --allctx yes --reporting yes --debug_migration 10 2>&1 | tee out.txt
+task run-svgpu-manager-opt-debug -- 2 --ttc_addr "127.0.0.1"
+
+task run-svgpu-manager-opt -- 2 --keepworkeralive yes --precreated_workers 1 --ttc_addr 127.0.0.1
+task run-svgpu-manager-opt -- 2 --keepworkeralive yes --precreated_workers 2 --allctx yes --reporting yes --debug_migration 3 --ttc_addr 127.0.0.1
+
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --migration_strat 0 --precreated_workers 1
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --migration_strat 0 --precreated_workers 2 --scheduler worstfit
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --migration_strat 1 --precreated_workers 2 --scheduler worstfit --allctx yes --reporting yes
+task run-svgpu-manager-opt -- 4 --keepworkeralive yes --migration_strat 0 --precreated_workers 1 --allctx yes --reporting yes --debug_migration 100
+**************************************************************************************************************************************
+
+Compilation:
+
+    task build-ava-release
+    task build-ava-debug
+
+As soon as container is up:
+
+    python3 -m pip install libs/onnxruntime_gpu-1.8.0-cp36-cp36m-linux_x86_64.whl
+    python3 -m pip install libs/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl
+    python3 -m pip install -r src/apps/covidct/requirements.txt
+
+For mlperf apps:
+    task download-onnxruntime
+    sudo cp -r src/apps/mlperf/cuda_dumps/onnxruntime/* /cuda_dumps
+
+    task run-svgpu-manager-opt-debug -- 2 --keepworkeralive yes
+    task run-svgpu-manager-opt -- 2 --keepworkeralive yes
+
+    apps:
+        task apps:run-bert-onnxruntime-ava 
+        task apps:face-id-test-ava 
+        task apps:run-resnet50-onnxruntime-ava 
+        task apps:face-det-test-ava
+        task covidct:run-covidct-in-mem-ava 
+        task apps:run-kmeans-ava
+
+    native:
+        task apps:run-bert-onnxruntime 
+        task apps:face-id-test
+        task apps:run-resnet50-onnxruntime
+        task apps:face-det-test
+        task covidct:run-covidct-in-mem
+        task apps:run-kmeans
+
+
+For kmeans class:
+    -p is poisson
+    svless:
+        *** RELEASE OR DEBUG? ***
+        task BUILD=release serverless:launch-gpu-server 
+        task BUILD=release serverless:launch-gpu-server -- --allctx yes --reporting yes --debug_migration 1000 2>&1 | tee out.txt
+        ./launch_faas_kmeans.py -i inputs/1000000p-10d.txt -k kmeans -d 10 -p
+    host:
+        ./concurrent_baseline.py -i inputs/1000000p-10d.txt -d 10 -g 4 -p
+
+    ./single_kmeans_test.py -i inputs/1000000p-10d.txt -d 10 -n 1
+
+Build app images requirements:
+    task serverless:build-basic-linux-image      (once, to create the ubuntu image, takes a long time)
+
+    task serverless:build-base-linux -f
+    *or*
+    task BUILD=release serverless:build-base-linux -f
+    # onnx might require pip upgrade
+    python3 -m pip install transformers pydicom pycocotools opencv-python-headless onnx
+
+Launch backend:
+    task serverless:launch-resmngr
+    task serverless:launch-fn-server
+    task BUILD=debug serverless:launch-gpu-server -- --keepworkeralive yes
+
+Test faas images:
+    task build-faas-face-det
+    task serverless:deploy-function -- faas_face_det --gpumem 32 --n 1
+    task serverless:invoke-faas-face-det -- --count 32 --batchsize 16
+
+    task build-faas-face-id
+    task serverless:deploy-function -- faas_face_id --gpumem 32 --n 1
+    task serverless:invoke-faas-face-id -- --count 32
+
+    task build-faas-classification-detection
+    task serverless:deploy-function -- faas_classification_detection --gpumem 32 --n 1
+    task serverless:invoke-faas-resnet50 -- --count 512
+
+    task build-faas-bert
+    task serverless:deploy-function -- faas_bert --mem 4000  --gpumem 32 --n 1 
+    task serverless:invoke-faas-bert -- --count 32
+
+    task build-faas-covidct
+    task serverless:deploy-function -- faas_covidct --gpumem 32 --n 1
+    task serverless:invoke-faas-covidct
+
+
+AVA_WORKER_DUMP_DIR=/disk/hfingler/serverless-gpus/src/apps/malloc/cuda_dumps AVA_GUEST_DUMP_DIR=/disk/hfingler/serverless-gpus/src/apps/malloc/cuda_dumps LD_LIBRARY_PATH=/disk/hfingler/serverless-gpus/build/ava/release/onnx_opt/lib AVA_CONFIG_FILE_PATH=/disk/hfingler/serverless-gpus/tools/ava.conf ./migration_bench 8
+
+
+# Running on CPU:
+    ##use no-GPU container:
+    run-container-host
+    ##install libs
+    python3 -m pip install onnxruntime==1.8.0 tensorflow==1.14 boto3
+    python3 -m pip install -r src/apps/covidct/requirements.txt
+    RUN_CPU=1 RUN_NATIVE=1 python3 handler.py
+
+in src/apps/kmeans
+./kmeans-pthreads -i /disk/hfingler/serverless-gpus/src/apps/kmeans/inputs/1m_16d_16c.txt -c 6
+
+# Native:
+    python3 -m pip install onnxruntime-gpu==1.4
+
+
+**************************************************************************************************************************************
+Microbench commands  (OLD):
+
+    task run-svgpu-manager-opt-debug -- 2  --keepworkeralive yes --allctx yes --reporting yes --debug_migration 1
+    # once to create the worker
+    AVA_CONFIG_FILE_PATH=tools/ava.conf LD_LIBRARY_PATH=build/ava/debug/onnx_opt/lib ./src/apps/malloc/migration_bench 16
+    # set port to correct one for created worker
+    ./tools/benchmarking/repeat_cmd.py 10 AVA_WORKER_ADDR=127.0.0.1:5300 AVA_CONFIG_FILE_PATH=tools/ava.conf LD_LIBRARY_PATH=build/ava/debug/onnx_opt/lib ./src/apps/malloc/migration_bench 16
+
+
+
+**************************************************************************************************************************************
+
+
+GPU server from scratch:
+
+    sudo apt install -y gcc zsh tmux build-essential pkg-config awscli unzip
+    sudo apt install linux-headers-generic
+    sudo apt install python3-pip
+    #wget https://us.download.nvidia.com/tesla/470.82.01/NVIDIA-Linux-x86_64-470.82.01.run
+    #sudo sh NVIDIA-Linux-x86_64-470.82.01.run
+    nvidia-smi
+
+    curl https://get.docker.com | sh && sudo systemctl --now enable docker
+    sudo usermod -aG docker $USER
+    # log out, log in
+    docker run hello-world
+
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
+        && curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add - \
+        && curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+
+    sudo apt-get update
+    sudo apt-get install -y nvidia-docker2
+    sudo systemctl restart docker
+    sudo docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
+
+    sudo nvidia-persistenced
+    sudo nvidia-smi -ac 877,1530
+
+    wget https://go.dev/dl/go1.17.5.linux-amd64.tar.gz
+    rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.17.5.linux-amd64.tar.gz
+    # add  export PATH=$PATH:/usr/local/go/bin to .zshrc
+    go install github.com/go-task/task/v3/cmd/task@latest
+    # add ~/go/bin to PATH
+
+    git clone git@github.com:hfingler/serverless-gpus.git
+    cd serverless-gpus
+    git submodule update --init --recursive
+
+    rm -f tools/containers/ava/.Dockerfile.ava-cuda-10.2.stamp
+    task build-ava-container102
+
+    task run-container102
+    
+    task download-onnxruntime
+    task download-tensorflow-cudart-dynam
+    python3 -m pip install build/onnxruntime/prebuilt/onnxruntime_gpu-1.8.0-cp36-cp36m-linux_x86_64.whl
+    python3 -m pip install build/tensorflow-cudart-dynam/prebuilt/tensorflow-1.14.1-cp36-cp36m-linux_x86_64.whl
+    python3 -m pip install -r src/apps/covidct/requirements.txt
+
+
+#
+#bert
+#
+    python3 -m pip install onnx
+    task mlperf:postprocess-onnx-bert-model
+    task apps:create-eval-features
+    #test, wont work natively on 102 container, only on 101
+    task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release apps:run-bert-onnxruntime-ava -- --batchsize 16 --count 512
+
+
+
+#
+#covid 
+#
+    task covidct:download-dataset -f
+    task covidct:extract-npy
+    python3 -m pip install cupy-cuda102
+    task build-zoom-kernel
+    python3 -m pip uninstall cupy-cuda102
+    python3 -m pip install -r src/apps/covidct/requirements.txt
+    sudo cp src/apps/covidct/refactored/zoom_kernel.cubin /cuda_dumps/
+    #test
+    task run-svgpu-manager-opt-debug -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release SPEC=onnx_opt covidct:run-covidct-in-mem-ava -- --batch-size 1 --count 2
+
+
+#
+#face det
+#
+    #out of container set on .aws/credentials
+        [default]
+aws_access_key_id = YOUR_aws_access_key_id
+aws_secret_access_key = YOUR_aws_sercret_access_key_id
+
+    task apps:download-face-det-onnx-model
+    #back to container
+    task apps:postprocess-face-det-onnx-model
+    # get WIDER_val.zip somehow, drive download not working, got from zemaitis
+    cd src/apps/faas_face_det && make && cd -
+    #test
+    task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release SPEC=onnx_opt apps:face-det-test-ava -- --bsize 16 --count 256
+
+#
+#face id
+#
+    python3 -m pip uninstall onnxruntime-gpu
+    python3 -m pip install onnxruntime-gpu==1.6
+    #edit src/apps/faas_face_id_client/detect.py to have only providers = ['CUDAExecutionProvider']
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/libcudnn8_8.0.5.39-1+cuda10.2_amd64.deb
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/libcudnn8-dev_8.0.5.39-1+cuda10.2_amd64.deb
+    dpkg -i both files
+
+    task apps:extract-lfw-faces
+    #test
+    task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release SPEC=onnx_opt apps:face-id-test-ava -- --batchsize 16 --count 256
+
+#
+#resnet 
+#
+    task mlperf:postprocess-resnet50-onnx
+    sudo apt install npm
+    sudo npm install -g tget
+    python3 -m pip install ck
+
+    task mlperf:pull-ck-repo
+    task mlperf:download-imagenet
+    task mlperf:download-resnet50-onnx
+    #test 
+    task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release SPEC=onnx_opt apps:run-resnet50-onnxruntime-ava -- --count 2048
+
+#
+#kmeans
+#
+    sudo cp -r src/apps/kmeans/cuda_dumps/* /cuda_dumps
+    #test
+    task run-svgpu-manager-opt -- 1 --keepworkeralive yes --precreated_workers 1
+    task BUILD=release SPEC=onnx_opt apps:run-kmeans-ava
+
+
+
+
+
+#To build TF dyn, had to add
+import sys
+sys.path.append("/root/.local/lib/python3.6/site-packages")
+#to vendor/tensorflow-cudart-dynam/tensorflow/python/keras/preprocessing/__init__.py

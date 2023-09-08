@@ -1,0 +1,173 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  run-numba:
+    desc: Launch minimal numba test with ava remoting
+    dir: "{{.APPS_DIR}}/minimal_numba"
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        CUDA_HOME={{.BUILD_DIR}}/ava/debug/onnx_dump/
+        python3 minimal.py 
+
+  download-face-det-onnx-model:
+    dir: "{{.APPS_DIR}}/faas_face_det/model"
+    cmds:
+      - aws s3 cp s3://zzt-videos/withpreprop_r50.onnx .
+    status:
+      - test -f withpreprop_r50.onnx
+
+  postprocess-face-det-onnx-model:
+    deps: [download-face-det-onnx-model]
+    dir: "{{.APPS_DIR}}/faas_face_det/model"
+    cmds:
+      - python3 {{.ROOT_DIR}}/tools/update_model_dim.py
+        --input_model withpreprop_r50.onnx
+        --output_model updated_withpreprop_r50.onnx
+      # - mkdir -p model_with_external_data
+      # - python3 "{{.APPS_DIR}}/mlperf/models/convert_to_external_data.py"
+      #   --input ./updated_withpreprop_r50.onnx
+      #   --output model_with_external_data/withpreprop_r50.onnx
+      #   --external_data_fname withpreprop_r50.onnx.external
+    status:
+      - test -f updated_withpreprop_r50.onnx
+      # - test -f model_with_external_data/withpreprop_r50.onnx
+      # - test -f model_with_external_data/withpreprop_r50.onnx.external
+
+  download-face-id-onnx-model:
+    dir: "{{.APPS_DIR}}/faas_face_id/model"
+    cmds:
+      - aws s3 cp s3://zzt-videos/updated_arcfaceresnet100-8.onnx .
+    status:
+      - test -f "{{.APPS_DIR}}/faas_face_id/model/updated_arcfaceresnet100-8.onnx"
+
+  download-widerface:
+    dir: "{{.APPS_DIR}}/faas_face_det_client/data"
+    cmds:
+      - ../../../../tools/gdrive_download.sh "0B6eKvaijfFUDd3dIRmpvSk8tLUk"
+      - unzip WIDER_val.zip
+    status:
+      - test -f WIDER_val.zip
+
+  download-lfw:
+    dir: "{{.APPS_DIR}}/faas_face_id_client/input_data"
+    cmds:
+      - wget -O lfw.tgz http://vis-www.cs.umass.edu/lfw/lfw.tgz
+      - wget -O pairs.txt http://vis-www.cs.umass.edu/lfw/pairs.txt
+      - wget -O people.txt http://vis-www.cs.umass.edu/lfw/people.txt
+      - tar -xvf lfw.tgz
+    status:
+      - test -f lfw.tgz
+      - test -f pairs.txt
+      - test -f people.txt
+
+  face-det-test-ava:
+    desc: "run face det on ava"
+    dir: "{{.APPS_DIR}}/faas_face_det/"
+    deps: [postprocess-face-det-onnx-model, download-widerface]
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      GPUMEM: '{{default "10000" .GPUMEM}}'
+    cmds:
+      - python3 handler.py
+
+  face-det-test:
+    desc: "run face det locally"
+    dir: "{{.APPS_DIR}}/faas_face_det/"
+    deps: [postprocess-face-det-onnx-model, download-widerface]
+    cmds:
+      - RUN_NATIVE=1 python3 handler.py
+
+  download-fddb:
+    dir: "{{.APPS_DIR}}/faas_face_det_client/data"
+    cmds:
+      - ../../../../tools/gdrive_download.sh 17t4WULUDgZgiSy5kpCax4aooyPaz3GQH
+      - unzip fddb_images.zip
+    status:
+      - test -f fddb_images.zip
+
+  face-id-test-ava:
+    desc: "run face id with ava"
+    dir: "{{.APPS_DIR}}/faas_face_id/"
+    #deps: [download-face-id-onnx-model, download-lfw, extract-lfw-faces]
+    cmds:
+      - python3 handler.py
+
+  face-id-test:
+    desc: "run face id with ava"
+    dir: "{{.APPS_DIR}}/faas_face_id/"
+    #deps: [download-face-id-onnx-model, download-lfw, extract-lfw-faces]
+    cmds:
+      - CUDA_VISIBLE_DEVICES=0 RUN_NATIVE=1 python3 handler.py
+
+  extract-lfw-faces:
+    deps: [download-lfw]
+    dir: "{{.APPS_DIR}}/faas_face_id_client"
+    cmds:
+      - make
+      - mkdir -p ./input_data/lfw_faces/
+      - FRAMEWORK=onnxrt python3 extract_face.py
+        --dmodel-path ../faas_face_det/model/updated_withpreprop_r50.onnx
+        --dataset-path ./input_data/lfw
+        --image-list ./input_data/imglist.txt
+        --output-path ./input_data/lfw_faces/
+    status:
+      - test -f ./input_data/lfw_faces/Zydrunas_Ilgauskas/Zydrunas_Ilgauskas_0001.jpg.npy
+
+  run-resnet50-onnxruntime-ava:
+    desc: "run resnet50 workload on ava"
+    dir: "{{.APPS_DIR}}/faas_classification_detection"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      GPUMEM: '{{default "10000" .GPUMEM}}'
+    cmds:
+      - python3 handler.py
+
+  run-resnet50-onnxruntime:
+    desc: "run resnet50 workload on ava"
+    dir: "{{.APPS_DIR}}/faas_classification_detection"
+    cmds:
+      - CUDA_VISIBLE_DEVICES=0 RUN_NATIVE=1 python3 handler.py
+
+  create-eval-features:
+    desc: "preprocess bert input"
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    cmds:
+      - python3 create_eval_features.py
+  
+  run-bert-onnxruntime-ava:
+    desc: "run bert workload on ava"
+    dir: "{{.APPS_DIR}}/faas_bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      GPUMEM: '{{default "5500" .GPUMEM}}'
+    cmds:
+      - python3 handler.py
+
+  run-bert-onnxruntime:
+    desc: "run bert workload on ava"
+    dir: "{{.APPS_DIR}}/faas_bert"
+    cmds:
+      - CUDA_VISIBLE_DEVICES=0 RUN_NATIVE=1 python3 handler.py
+
+  run-kmeans-ava:
+    desc: "run kmeans workload on ava"
+    dir: "{{.APPS_DIR}}/kmeans"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      GPUMEM: '{{default "10000" .GPUMEM}}'
+    cmds:
+      - python3 handler.py
+
+  run-kmeans:
+    desc: "run kmeans workload on native"
+    dir: "{{.APPS_DIR}}/kmeans"
+    cmds:
+      - CUDA_VISIBLE_DEVICES=0 RUN_NATIVE=1 python3 handler.py

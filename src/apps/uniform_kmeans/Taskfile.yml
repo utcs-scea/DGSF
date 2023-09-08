@@ -1,0 +1,44 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build-all:
+    desc: Compile all kmeans
+    dir: "{{.APPS_DIR}}/uniform_kmeans"
+    cmds:
+      - ./run_uniform_kmeans.py -r {{.APPS_DIR}}/uniform_kmeans -i {{.APPS_DIR}}/my_kmeans/inputs/small.txt -d 24 -c
+
+  run-ava:
+    desc: Launch all kmeans with ava remoting
+    dir: "{{.APPS_DIR}}/uniform_kmeans"
+    vars:           
+      SPEC: '{{default "opt" .SPEC}}'
+    cmds:
+      - echo "Pass arguments after --. for example <task> -- appname gpu_memory_required"
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/release/onnx_opt/lib
+        AVA_WORKER_DUMP_DIR={{.APPS_DIR}}/uniform_kmeans/kmeans1/cuda_dumps
+        AVA_GUEST_DUMP_DIR={{.APPS_DIR}}/uniform_kmeans/kmeans1/cuda_dumps
+        ./kmeans1/bin/kmeans_cuda -k 16 -i inputs/1000000p-10d.txt -d 10 -t 0.001 -m 200 -s 8675309
+             
+
+  run-faas:
+    desc: Launch all kmeans as functions
+    dir: "{{.APPS_DIR}}/uniform_kmeans"
+    cmds:
+      - echo "Pass arguments after --. for example <task> -- appname gpu_memory_required"
+      - ./launch_faas_kmeans.py -i inputs/small.txt -d 24 -n 1
+   
+ 
+  benchmark-host:
+    desc: Launch all kmeans on host
+    dir: "{{.APPS_DIR}}/uniform_kmeans"
+    vars:
+      SPEC: '{{default "opt" .SPEC}}'
+    cmds:
+      - echo "Pass arguments after --. for example <task> -- appname gpu_memory_required"
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        ./run_uniform_kmeans.py -r {{.APPS_DIR}}/uniform_kmeans -i {{.APPS_DIR}}/kmeans/inputs/small.txt -d 24 -s {{.SPEC}} -n 1

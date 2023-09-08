@@ -1,0 +1,47 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build_vectorsum:
+    dir: "{{.APPS_DIR}}/vectorsum"
+    cmds:
+      - make clean && make
+
+  run-ava:
+    desc: Launch vectorsum with ava remoting
+    deps: [build_vectorsum]
+    dir: "{{.APPS_DIR}}/vectorsum"
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/debug/onnx_opt/lib
+        ./vectorsum -n 16384 -l 100000 -k 2
+
+  run-local:
+    desc: Launch vectorsum locally, just for testing
+    deps: [build_vectorsum]
+    dir: "{{.APPS_DIR}}/vectorsum"
+    cmds:
+      - ./vectorsum -n 16384 -l 10000000 -k 10
+
+  run-multiple:
+    deps: [build_vectorsum]
+    desc: Launch N vectorsum with ava remoting, pass parameter by appending -- <n>
+    dir: "{{.APPS_DIR}}/vectorsum"
+    cmds:
+      - AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH=$AVA_DIR/build/install/onnx_dump/lib
+        $TOOLS_DIR/benchmarking/launch_n_processes.py {{.CLI_ARGS}} 
+        ./vectorsum -n 16384 -l 10000000 -k 10
+
+  run-benchmark:
+    deps: [build_vectorsum]
+    desc: Runs the full benchmark. Check the python file in tools/benchmarking for settings.
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./benchmark_simple.py
+        AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.AVA_DIR}}/build/install/onnx_dump/lib
+        -cmd {{.APPS_DIR}}/vectorsum/vectorsum -n 16384 -l 2000000 -k 16

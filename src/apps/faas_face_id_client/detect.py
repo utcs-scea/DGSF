@@ -1,0 +1,1 @@
+../faas_face_det/detect.py

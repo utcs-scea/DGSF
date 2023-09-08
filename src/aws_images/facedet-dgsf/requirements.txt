@@ -1,0 +1,6 @@
+setuptools
+boto3
+scikit-build
+numpy==1.18.5
+cython
+opencv-python-headless

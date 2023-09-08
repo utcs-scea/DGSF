@@ -1,0 +1,81 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build_test:
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - pwd
+      - make indocker
+
+  run-ava:
+    desc: Launch test with ava remoting
+#    deps: [build_test]
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        AVA_WORKER_DUMP_DIR={{.APPS_DIR}}/test_get_attributes/cuda_dumps
+        AVA_GUEST_DUMP_DIR={{.APPS_DIR}}/test_get_attributes/cuda_dumps
+        AVA_REQUESTED_GPU_MEMORY=123456789
+        ./test
+
+  run-ava-dump-debug:
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - task: run-ava
+        vars: {BUILD: "debug"}
+
+  run-ava-opt:
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt"}
+
+  run-ava-opt-debug:
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt", BUILD: "debug"}
+
+  run-local:
+    desc: Launch test locally, just for testing
+#    deps: [build_test]
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - ./test
+     
+  run-multiple:
+    deps: [build_test]
+    desc: Launch N test with ava remoting, pass parameter by appending -- <n>
+    dir: "{{.APPS_DIR}}/test_get_attributes"
+    cmds:
+      - AVA_CONFIG_FILE_PATH=$TOOLS_DIR/ava.conf
+        LD_LIBRARY_PATH=$AVA_DIR/build/install/onnx_dump/lib
+        $TOOLS_DIR/benchmarking/launch_n_processes.py {{.CLI_ARGS}} 
+        ./test
+
+  run-benchmark:
+#    deps: [build_test]
+    desc: Runs the full benchmark. Check the python file in tools/benchmarking for settings.
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./benchmark_simple.py
+        AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/release/onnx_opt/lib
+        -cmd {{.APPS_DIR}}/test_get_attributes/test
+
+  run-baseline:
+#    deps: [build_test]
+    desc: Runs the full benchmark. Check the python file in tools/benchmarking for settings.
+    dir: "{{.TOOLS_DIR}}/benchmarking"
+    cmds:
+      - ./baseline_benchmark.py
+        CUDA_VISIBLE_DEVICES=3
+        -cmd {{.APPS_DIR}}/test_get_attributes/test

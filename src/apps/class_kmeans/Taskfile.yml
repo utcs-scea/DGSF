@@ -1,0 +1,65 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build-all:
+# I haven't tried to compile them in a while, this might not work / some might have incorrect commands to compile in their submit files
+    desc: Compile all kmeans
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/run_class_kmeans.py -r {{.APPS_DIR}}/class_kmeans -i inputs/small.txt -d 24 -c
+          
+  run-faas-kmeans:
+    desc: Deploy and launch all kmeans as functions. Change -k flag to run specific kmeans ("kmeans-54"). Specify -f for number of functions to pre-deploy, default is n+5
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/launch_faas_kmeans.py -i inputs/1000000p-10d.txt -k kmeans -d 10
+
+  run-kmeans-ava:
+    desc: Launch all kmeans with AvA opt spec (release mode)
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    vars:
+      SPEC: '{{default "opt" .SPEC}}'
+    cmds:
+     - ./scripts/run_class_kmeans.py -s {{.SPEC}} -i inputs/1000000p-10d.txt -d 10 -r {{.APPS_DIR}}/class_kmeans -n 1
+
+  generate-dumps:
+    desc: Launch all kmeans with AvA dump spec (release mode), writes dumpfiles to /cuda_dumps of each kmeans
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    vars:
+      SPEC: 'dump'
+    cmds:
+      - ./scripts/run_class_kmeans.py -s dump -i inputs/small.txt -d 24 -r {{.APPS_DIR}}/class_kmeans -n 1
+
+  run-kmeans-serial-baseline:
+    desc: run all kmeans natively, where kmeans are run serially within each GPU
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/serial_baseline.py -i inputs/1000000p-10d.txt -d 10 -n 1
+ 
+  run-kmeans-concurrent-baseline:
+    desc: run all kmeans natively, where kmeans are spread evenly among GPUs and ran concurrently
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/concurrent_baseline.py -d 10 -i inputs/1000000p-10d.txt -n 1 -g 4
+  
+  run-kmeans-concurrent-baseline-poisson:
+    desc: run all kmeans natively, where kmeans are spread evenly among GPUs and ran concurrently in a poisson distrubution
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/concurrent_baseline.py -d 10 -i inputs/1000000p-10d.txt -n 1 -g 4 -p
+ 
+  host-stats:
+    desc: collect statistics for all kmeans running natively
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/host_stats.py -i inputs/1000000p-10d.txt  -d 10
+
+  faas-stats:
+    desc: collect statistics for all kmeans running in serverless
+    dir: "{{.APPS_DIR}}/class_kmeans"
+    cmds:
+      - ./scripts/faas_stats.py -i inputs/1000000p-10d.txt  -d 10

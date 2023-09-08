@@ -1,0 +1,1 @@
+../mlperf/inference/language/bert/create_squad_data.py

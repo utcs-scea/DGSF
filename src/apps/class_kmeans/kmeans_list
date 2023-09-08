@@ -1,0 +1,30 @@
+List of good and bad kmeans. Bad kmeans are deletd but can be found in earlier commits; some good kmeans don't match the numbers they have now
+
+kmeans-12 LONG 250s
+kmeans-15 good 10s
+kmeans-17 bad 0s
+kmeans-19 bad fail
+kmeans-2 bad hangs
+kmeans-21 good 11s
+kmeans-22 don't think it uses gpu
+kmeans-24 long 280s
+kmeans-26 bad no cpu
+kmeans-29 bad
+kmeans-30 good
+kmeans-33 bad
+kmeans-37 bad
+kmeans-42 good 10s
+kmeans-43 bad
+kmeans-45 good 10s
+kmeans-48 good ? 8-38s
+kmeans-49 good 7-50s
+kmeans-50 good 10s
+kmeans-51 bad long 400s
+kmeans-52 bad long
+kmeans-54 good 30s
+kmeans-55 bad
+kmeans-6 bad
+kmeans-61  good 6s
+kmeans-62 bad long
+kmeans-63 bad long 400s
+kmeans-64 bad long 110s

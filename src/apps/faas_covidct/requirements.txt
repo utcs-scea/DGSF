@@ -1,0 +1,4 @@
+scikit-image==0.17.2
+cucim==21.6.0
+cupy-cuda101==9.2.0
+pydicom==2.1.2

@@ -1,0 +1,1193 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  pull-ck-repo:
+    # desc: download the ck repository
+    dir: "{{.APPS_DIR}}/mlperf"
+    cmds:
+      - python3 -m ck pull repo:ck-env
+
+  postprocess-onnx-model:
+    # desc: convert to external data format
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    vars:
+      MODEL: '{{default "resnet50_v1.onnx" .MODEL}}'
+    cmds:
+      - mkdir -p model_with_external_data
+      - python3 convert_to_external_data.py
+        --input ./{{.MODEL}}
+        --output model_with_external_data/{{.MODEL}}
+        --external_data_fname {{.MODEL}}.external
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/model_with_external_data/{{.MODEL}}
+
+  convert-to-torchscript:
+    # desc: convert pytorch model to torchscript
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection/python"
+    vars:
+      MODEL_INPUT: '{{default "../../../../models/ssd_mobilenet_v1.pytorch" .MODEL_INPUT}}'
+      MODEL_OUTPUT: '{{default "../../../../models/ssd_mobilenet_v1_scripted.pth" .MODEL_OUTPUT}}'
+    cmds:
+      - python3 to_torchscript.py --input {{.MODEL_INPUT}} --output {{.MODEL_OUTPUT}}
+
+  convert-ssd-mobilenet-pytorch:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection/python"
+    # desc: convert ssd-mobilenet model to torchscript
+    cmds:
+      - task: convert-to-torchscript
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/ssd_mobilenet_v1_scripted.pth
+
+  convert-ssd-resnet34-pytorch:
+    deps: [download-ssd-resnet34-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection/python"
+    # desc: convert ssd-resnet34 model to torchscript
+    cmds:
+      - task: convert-to-torchscript
+        vars:
+          MODEL_INPUT: "../../../../models/resnet34-ssd1200.pytorch"
+          MODEL_OUTPUT: "../../../../models/resnet34-ssd1200_scripted.pth"
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet34-ssd1200_scripted.pth
+
+  download-resnet50-onnx:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget -O resnet50_v1.onnx https://zenodo.org/record/2592612/files/resnet50_v1.onnx
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet50_v1.onnx
+
+  download-resnet50-pytorch:
+    # desc: Download resnet50 pytorch model
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget https://zenodo.org/record/4588417/files/resnet50-19c8e357.pth
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet50-19c8e357.pth
+
+  download-resnet50-tf:
+    # desc: download resnet50 tensorflow model
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget -O resnet50_v1.pb https://zenodo.org/record/2535873/files/resnet50_v1.pb
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet50_v1.pb
+
+  postprocess-resnet50-onnx:
+    deps: [download-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - task: postprocess-onnx-model
+
+  download-ssd-mobilenet-onnx:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget -O ssd_mobilenet_v1_coco_2018_01_28.onnx https://zenodo.org/record/3163026/files/ssd_mobilenet_v1_coco_2018_01_28.onnx
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/ssd_mobilenet_v1_coco_2018_01_28.onnx
+
+  download-ssd-mobilenet-pytorch:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget https://zenodo.org/record/3239977/files/ssd_mobilenet_v1.pytorch
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/ssd_mobilenet_v1.pytorch
+
+  download-ssd-mobilenet-tf:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - test -f {{.APPS_DIR}}/mlperf/models/ssd_mobilenet_v1_coco_2018_01_28.tar.gz ||
+        wget http://download.tensorflow.org/models/object_detection/ssd_mobilenet_v1_coco_2018_01_28.tar.gz;
+        tar -xvf ssd_mobilenet_v1_coco_2018_01_28.tar.gz
+      - test -f {{.APPS_DIR}}/mlperf/models/mobilenet_v1_ssd_8bit_finetuned.tar.gz ||
+        wget https://zenodo.org/record/3252084/files/mobilenet_v1_ssd_8bit_finetuned.tar.gz;
+        tar -xvf mobilenet_v1_ssd_8bit_finetuned.tar.gz
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/ssd_mobilenet_v1_coco_2018_01_28.tar.gz
+      - test -f {{.APPS_DIR}}/mlperf/models/mobilenet_v1_ssd_8bit_finetuned.tar.gz
+
+  download-ssd-resnet34-tf:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget -O tf_ssd_resnet34_22.1.zip https://zenodo.org/record/3345892/files/tf_ssd_resnet34_22.1.zip?download=1
+      - unzip tf_ssd_resnet34_22.1.zip
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/tf_ssd_resnet34_22.1.zip
+
+  postprocess-ssd-mobilenet-onnx:
+    deps: [download-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - python3 {{.ROOT_DIR}}/vendor/onnxruntime/tools/python/remove_initializer_from_input.py
+        --input ./ssd_mobilenet_v1_coco_2018_01_28.onnx
+        --output ./updated_ssd_mobilenet_v1_coco_2018_01_28.onnx
+      - task: postprocess-onnx-model
+        vars: {MODEL: updated_ssd_mobilenet_v1_coco_2018_01_28.onnx}
+    status:
+      - test -f updated_ssd_mobilenet_v1_coco_2018_01_28.onnx
+
+  download-ssd-resnet34-onnx:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget https://zenodo.org/record/3228411/files/resnet34-ssd1200.onnx
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet34-ssd1200.onnx
+
+  download-ssd-resnet34-pytorch:
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - wget https://zenodo.org/record/3236545/files/resnet34-ssd1200.pytorch
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/models/resnet34-ssd1200.pytorch
+
+  postprocess-ssd-resnet34-onnx:
+    deps: [download-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/models"
+    cmds:
+      - python3 {{.ROOT_DIR}}/vendor/onnxruntime/tools/python/remove_initializer_from_input.py
+        --input ./resnet34-ssd1200.onnx --output ./updated_resnet34-ssd1200.onnx
+      - task: postprocess-onnx-model
+        vars: {MODEL: updated_resnet34-ssd1200.onnx}
+    status:
+      - test -f updated_resnet34-ssd1200.onnx
+
+  download-imagenet:
+    # desc: Download imagenet2012 validation dataset
+    dir: "{{.APPS_DIR}}/mlperf/data"
+    cmds:
+      #- tget https://academictorrents.com/download/5d6d0df7ed81efd49ca99ea4737e0ae5e3a5f2e5.torrent
+      - mkdir -p ILSVRC2012_img_val
+      - mv ILSVRC2012_img_val.tar ILSVRC2012_img_val && cd ILSVRC2012_img_val && tar -xf ILSVRC2012_img_val.tar
+      - CK_TOOLS="{{.APPS_DIR}}/mlperf/data" python3 -m ck install package --tags=image-classification,dataset,imagenet,aux
+      - cp {{.APPS_DIR}}/mlperf/data/dataset-imagenet-ilsvrc2012-aux-from.berkeley/val.txt {{.APPS_DIR}}/mlperf/data/ILSVRC2012_img_val/val_map.txt
+    status:
+      - test -f "{{.APPS_DIR}}/mlperf/data/ILSVRC2012_img_val/ILSVRC2012_img_val.tar"
+      - test -f "{{.APPS_DIR}}/mlperf/data/dataset-imagenet-ilsvrc2012-aux-from.berkeley/caffe_ilsvrc12.tar.gz"
+
+  download-coco:
+    # desc: Download coco dataset
+    dir: "{{.APPS_DIR}}/mlperf/data"
+    cmds:
+      - CK_TOOLS="{{.APPS_DIR}}/mlperf/data" ck install package --tags=object-detection,dataset,coco,2017,val,original
+    status:
+      - test -d "{{.APPS_DIR}}/mlperf/data/dataset-coco-2017-val"
+
+  preprocess-coco:
+    # desc: preprocess coco dataset
+    deps: [download-coco]
+    dir: "{{.APPS_DIR}}/mlperf/inference"
+    cmds:
+      - python3 tools/upscale_coco/upscale_coco.py --inputs {{.APPS_DIR}}/mlperf/data/dataset-coco-2017-val --outputs {{.APPS_DIR}}/mlperf/data/coco-300 --size 300 300 --format png
+      - python3 tools/upscale_coco/upscale_coco.py --inputs {{.APPS_DIR}}/mlperf/data/dataset-coco-2017-val --outputs {{.APPS_DIR}}/mlperf/data/coco-1200 --size 1200 1200 --format png
+    status:
+      - test -d "{{.APPS_DIR}}/mlperf/data/coco-300"
+      - test -d "{{.APPS_DIR}}/mlperf/data/coco-1200"
+
+  build-mlperf-loadgen:
+    # desc: build mlperf loadgen
+    dir: "{{.APPS_DIR}}/mlperf/inference/loadgen"
+    cmds:
+      - CFLAGS="-std=c++14" python3 setup.py develop --user
+    status:
+      - python3 -m pip list | grep mlperf-loadgen
+
+  build-classification-and-detection:
+    # desc: build classification and detection python module
+    deps: [build-mlperf-loadgen]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    cmds:
+      - python3 -m pip install matplotlib
+      - python3 setup.py develop --user
+    status:
+      - python3 -m pip list | grep mlperf-inference
+
+  run-classification-and-detection:
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    deps: [build-classification-and-detection]
+    vars:
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+      MODEL_NAME: '{{default "model_with_external_data/resnet50_v1.onnx" .MODEL_NAME}}'
+      DATASET: '{{default "ILSVRC2012_img_val" .DATASET}}'
+      MODEL: '{{default "resnet50" .MODEL}}'
+      PROFILE: '{{default "resnet50-onnxruntime" .PROFILE}}'
+      DEVICE: '{{default "gpu" .DEVICE}}'
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - mkdir -p {{.APPS_DIR}}/mlperf/output/{{.MODEL}}-gpu/{{.BACKEND}}/{{.SCENARIO}}/ava
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        TF_INTRA_OP_PARALLELISM_THREADS=1 TF_INTER_OP_PARALLELISM_THREADS=1
+        python3 python/main.py --profile {{.PROFILE}} --mlperf_conf ../../mlperf.conf
+        --dataset-path {{.APPS_DIR}}/mlperf/data/{{.DATASET}}/
+        --model {{.APPS_DIR}}/mlperf/models/{{.MODEL_NAME}}
+        --output {{.APPS_DIR}}/mlperf/output/{{.MODEL}}-gpu/{{.BACKEND}}/{{.SCENARIO}}/ava
+        --scenario {{.SCENARIO}} {{.CLI_ARGS}} --backend {{.BACKEND}}
+
+  run-classification-and-detection-local:
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    deps: [build-classification-and-detection]
+    vars:
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+      MODEL_NAME: '{{default "model_with_external_data/resnet50_v1.onnx" .MODEL_NAME}}'
+      DATASET: '{{default "ILSVRC2012_img_val" .DATASET}}'
+      MODEL: '{{default "resnet50" .MODEL}}'
+      PROFILE: '{{default "resnet50-onnxruntime" .PROFILE}}'
+      DEVICE: '{{default "gpu" .DEVICE}}'
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - mkdir -p {{.APPS_DIR}}/mlperf/output/{{.MODEL}}-gpu/{{.BACKEND}}/{{.SCENARIO}}/local
+      - CUDA_VISIBLE_DEVICES=1
+        TF_INTRA_OP_PARALLELISM_THREADS=1 TF_INTER_OP_PARALLELISM_THREADS=1
+        python3 python/main.py --profile {{.PROFILE}} --mlperf_conf ../../mlperf.conf
+        --dataset-path {{.APPS_DIR}}/mlperf/data/{{.DATASET}}/
+        --model {{.APPS_DIR}}/mlperf/models/{{.MODEL_NAME}}
+        --output {{.APPS_DIR}}/mlperf/output/{{.MODEL}}-gpu/{{.BACKEND}}/{{.SCENARIO}}/local
+        --scenario {{.SCENARIO}} {{.CLI_ARGS}} --backend {{.BACKEND}}
+
+  run-resnet50-onnxruntime-local:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection-local
+
+  run-resnet50-pytorch-local:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars: {BACKEND: pytorch}
+
+  run-resnet50-tf-local:
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    deps: [download-resnet50-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          BACKEND: tensorflow
+          PROFILE: resnet50-tf
+          MODEL_NAME: "resnet50_v1.pb"
+
+  run-resnet50-onnxruntime-dump:
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    cmds:
+      - task: run-classification-and-detection
+
+  run-resnet50-onnxruntime-dump-debug:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {BUILD: "debug"}
+
+  run-resnet50-onnxruntime-opt:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {SPEC: "onnx_opt"}
+
+  run-resnet50-onnxruntime-opt-debug:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {SPEC: "onnx_opt", BUILD: "debug"}
+
+  run-resnet50-pytorch-dump:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {BACKEND: "pytorch"}
+
+  run-resnet50-pytorch-dump-debug:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {BUILD: "debug", BACKEND: "pytorch"}
+
+  run-resnet50-pytorch-opt:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {SPEC: "onnx_opt", BACKEND: "pytorch"}
+
+  run-resnet50-pytorch-opt-debug:
+    deps: [postprocess-resnet50-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with onnxruntime and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {SPEC: "onnx_opt", BUILD: "debug", BACKEND: "pytorch"}
+
+  run-resnet50-tf-dump:
+    deps: [download-resnet50-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars: {BACKEND: tensorflow, PROFILE: resnet50-tf, MODEL_NAME: "resnet50_v1.pb"}
+
+  run-resnet50-tf-dump-debug:
+    deps: [download-resnet50-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          BACKEND: tensorflow
+          PROFILE: resnet50-tf
+          MODEL_NAME: "resnet50_v1.pb"
+          BUILD: "debug"
+
+  run-resnet50-tf-opt:
+    deps: [download-resnet50-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          BACKEND: tensorflow
+          PROFILE: resnet50-tf
+          MODEL_NAME: "resnet50_v1.pb"
+          SPEC: "onnx_opt"
+
+  run-resnet50-tf-opt-debug:
+    deps: [download-resnet50-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run resnet50_v1 with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          BACKEND: tensorflow
+          PROFILE: resnet50-tf
+          MODEL_NAME: "resnet50_v1.pb"
+          SPEC: "onnx_opt"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-onnxruntime-local:
+    deps: [preprocess-coco, postprocess-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          PROFILE: "ssd-mobilenet-onnxruntime"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "model_with_external_data/updated_ssd_mobilenet_v1_coco_2018_01_28.onnx"
+
+  run-ssd-mobilenet-pytorch-native-local:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch-native"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "ssd_mobilenet_v1.pytorch"
+          BACKEND: "pytorch-native"
+
+  run-ssd-mobilenet-pytorch-local:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch"
+          DATASET: "coco-300"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BACKEND: "pytorch"
+
+  run-ssd-mobilenet-onnxruntime-dump:
+    deps: [preprocess-coco, postprocess-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-onnxruntime"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "model_with_external_data/updated_ssd_mobilenet_v1_coco_2018_01_28.onnx"
+
+  run-ssd-mobilenet-onnxruntime-dump-debug:
+    deps: [preprocess-coco, postprocess-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-onnxruntime"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "model_with_external_data/updated_ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-onnxruntime-opt:
+    deps: [preprocess-coco, postprocess-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-onnxruntime"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "model_with_external_data/updated_ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          SPEC: "onnx_opt"
+
+  run-ssd-mobilenet-onnxruntime-opt-debug:
+    deps: [preprocess-coco, postprocess-ssd-mobilenet-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-onnxruntime"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "model_with_external_data/updated_ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          SPEC: "onnx_opt"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-pytorch-native-dump:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch-native"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "ssd_mobilenet_v1.pytorch"
+          BACKEND: "pytorch-native"
+
+  run-ssd-mobilenet-pytorch-native-dump-debug:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch-native"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "ssd_mobilenet_v1.pytorch"
+          BACKEND: "pytorch-native"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-pytorch-native-opt:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch-native"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "ssd_mobilenet_v1.pytorch"
+          BACKEND: "pytorch-native"
+          SPEC: "onnx_opt"
+
+  run-ssd-mobilenet-pytorch-native-opt-debug:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch-native"
+          MODEL: "ssd-mobilenet"
+          DATASET: "coco-300"
+          MODEL_NAME: "ssd_mobilenet_v1.pytorch"
+          BACKEND: "pytorch-native"
+          BUILD: "debug"
+          SPEC: "onnx_opt"
+
+  run-ssd-mobilenet-pytorch-dump:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch"
+          DATASET: "coco-300"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BACKEND: "pytorch"
+
+  run-ssd-mobilenet-pytorch-dump-debug:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch"
+          DATASET: "coco-300"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BACKEND: "pytorch"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-pytorch-opt:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch"
+          DATASET: "coco-300"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BACKEND: "pytorch"
+          SPEC: "onnx_opt"
+
+  run-ssd-mobilenet-pytorch-opt-debug:
+    deps: [download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with pytorch and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-mobilenet-pytorch"
+          DATASET: "coco-300"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28.onnx"
+          BACKEND: "pytorch"
+          SPEC: "onnx_opt"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-tf-local:
+    deps: [download-ssd-mobilenet-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with tensorflow and imagenet data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          DATASET: "coco-300"
+          PROFILE: "ssd-mobilenet-tf"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb"
+          BACKEND: "tensorflow"
+
+  run-ssd-mobilenet-tf-dump:
+    deps: [download-ssd-mobilenet-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with tensorflow and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-300"
+          PROFILE: "ssd-mobilenet-tf"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb"
+          BACKEND: "tensorflow"
+
+  run-ssd-mobilenet-tf-dump-debug:
+    deps: [download-ssd-mobilenet-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with tensorflow and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-300"
+          PROFILE: "ssd-mobilenet-tf"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb"
+          BACKEND: "tensorflow"
+          BUILD: "debug"
+
+  run-ssd-mobilenet-tf-opt:
+    deps: [download-ssd-mobilenet-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with tensorflow and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-300"
+          PROFILE: "ssd-mobilenet-tf"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb"
+          BACKEND: "tensorflow"
+          SPEC: "onnx_opt"
+
+  run-ssd-mobilenet-tf-opt-debug:
+    deps: [download-ssd-mobilenet-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-mobilenet with tensorflow and imagenet data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-300"
+          PROFILE: "ssd-mobilenet-tf"
+          MODEL: "ssd-mobilenet"
+          MODEL_NAME: "ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb"
+          BACKEND: "tensorflow"
+          BUILD: "debug"
+          SPEC: "onnx_opt"
+
+  run-ssd-resnet34-onnxruntime-local:
+    deps: [preprocess-coco, postprocess-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          PROFILE: "ssd-resnet34-onnxruntime"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "model_with_external_data/updated_resnet34-ssd1200.onnx"
+
+  run-ssd-resnet34-pytorch-local:
+    deps: [preprocess-coco, download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          PROFILE: "ssd-resnet34-pytorch"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "resnet34-ssd1200.pytorch"
+          BACKEND: "pytorch-native"
+
+  run-ssd-resnet34-onnxruntime-dump:
+    deps: [preprocess-coco, postprocess-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-onnxruntime"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "model_with_external_data/updated_resnet34-ssd1200.onnx"
+
+  run-ssd-resnet34-onnxruntime-dump-debug:
+    deps: [preprocess-coco, postprocess-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-onnxruntime"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "model_with_external_data/updated_resnet34-ssd1200.onnx"
+          BUILD: "debug"
+
+  run-ssd-resnet34-onnxruntime-opt:
+    deps: [preprocess-coco, postprocess-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with onnxruntime and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-onnxruntime"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "model_with_external_data/updated_resnet34-ssd1200.onnx"
+          SPEC: "onnx_opt"
+
+  run-ssd-resnet34-onnxruntime-opt-debug:
+    deps: [preprocess-coco, postprocess-ssd-resnet34-onnx]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with onnxruntime and coco data
+    cmds:
+      - task: run-vision
+        vars:
+          PROFILE: "ssd-resnet34-onnxruntime"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "model_with_external_data/updated_resnet34-ssd1200.onnx"
+          SPEC: "onnx_opt"
+          BUILD: "debug"
+
+  run-ssd-resnet34-pytorch-dump:
+    deps: [preprocess-coco, download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-pytorch"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "resnet34-ssd1200.pytorch"
+          BACKEND: "pytorch-native"
+
+  run-ssd-resnet34-pytorch-dump-debug:
+    deps: [preprocess-coco, download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-pytorch"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "resnet34-ssd1200.pytorch"
+          BACKEND: "pytorch-native"
+          BUILD: "debug"
+
+  run-ssd-resnet34-pytorch-opt:
+    deps: [preprocess-coco, download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-pytorch"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "resnet34-ssd1200.pytorch"
+          BACKEND: "pytorch-native"
+          SPEC: "onnx_opt"
+
+  run-ssd-resnet34-pytorch-opt-debug:
+    deps: [preprocess-coco, download-ssd-mobilenet-pytorch]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          PROFILE: "ssd-resnet34-pytorch"
+          MODEL: "ssd-resnet34"
+          DATASET: "coco-1200"
+          MODEL_NAME: "resnet34-ssd1200.pytorch"
+          BACKEND: "pytorch-native"
+          BUILD: "debug"
+          SPEC: "onnx_opt"
+
+  run-ssd-resnet34-tf-local:
+    deps: [preprocess-coco, download-ssd-resnet34-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection-local
+        vars:
+          DATASET: "coco-1200-tf"
+          PROFILE: "ssd-resnet34-tf"
+          MODEL: "ssd-resnet34"
+          MODEL_NAME: "tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb"
+          BACKEND: "tensorflow"
+
+  run-ssd-resnet34-tf-dump:
+    deps: [preprocess-coco, download-ssd-resnet34-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-1200-tf"
+          PROFILE: "ssd-resnet34-tf"
+          MODEL: "ssd-resnet34"
+          MODEL_NAME: "tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb"
+          BACKEND: "tensorflow"
+
+  run-ssd-resnet34-tf-dump-debug:
+    deps: [preprocess-coco, download-ssd-resnet34-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-1200-tf"
+          PROFILE: "ssd-resnet34-tf"
+          MODEL: "ssd-resnet34"
+          MODEL_NAME: "tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb"
+          BACKEND: "tensorflow"
+          BUILD: "debug"
+
+  run-ssd-resnet34-tf-opt:
+    deps: [preprocess-coco, download-ssd-resnet34-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-1200-tf"
+          PROFILE: "ssd-resnet34-tf"
+          MODEL: "ssd-resnet34"
+          MODEL_NAME: "tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb"
+          BACKEND: "tensorflow"
+          SPEC: "onnx_opt"
+
+  run-ssd-resnet34-tf-opt-debug:
+    deps: [preprocess-coco, download-ssd-resnet34-tf]
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    # desc: Run ssd-resnet34 with pytorch and coco data
+    cmds:
+      - task: run-classification-and-detection
+        vars:
+          DATASET: "coco-1200-tf"
+          PROFILE: "ssd-resnet34-tf"
+          MODEL: "ssd-resnet34"
+          MODEL_NAME: "tf_ssd_resnet34_22.1/resnet34_tf.22.1.pb"
+          BACKEND: "tensorflow"
+          BUILD: "debug"
+          SPEC: "onnx_opt"
+
+  download-bert-data:
+    # desc: Download inference data used by bert
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BERT_BUILD_DIR: '{{default "build" .BERT_BUILD_DIR}}'
+      BERT_DATA_DIR: '{{default "build/data" .BERT_DATA_DIR}}'
+    cmds:
+      - mkdir -p {{.BERT_DATA_DIR}}
+      - mkdir -p {{.BERT_DATA_DIR}}/bert_tf_v1_1_large_fp32_384_v2
+      - mkdir -p {{.BERT_BUILD_DIR}}/result
+      - cp ../../mlperf.conf {{.BERT_BUILD_DIR}}/
+      - git submodule update --init DeepLearningExamples
+      - wget -O {{.BERT_DATA_DIR}}/dev-v1.1.json https://github.com/rajpurkar/SQuAD-explorer/blob/master/dataset/dev-v1.1.json?raw=true
+      - wget -O {{.BERT_DATA_DIR}}/evaluate-v1.1.py https://github.com/allenai/bi-att-flow/raw/master/squad/evaluate-v1.1.py
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/inference/language/bert/{{.BERT_DATA_DIR}}/dev-v1.1.json
+      - test -f {{.APPS_DIR}}/mlperf/inference/language/bert/{{.BERT_DATA_DIR}}/evaluate-v1.1.py
+
+  download-onnx-bert-model:
+    deps: [download-bert-data]
+    # desc: Download onnx model used by bert
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BERT_DIR: '{{default "build/data/bert_tf_v1_1_large_fp32_384_v2" .BERT_DIR}}'
+    cmds:
+      - wget -O {{.BERT_DIR}}/model.onnx https://zenodo.org/record/3733910/files/model.onnx?download=1
+      - wget -O {{.BERT_DIR}}/bert_large_v1_1_fake_quant.onnx https://zenodo.org/record/3750364/files/bert_large_v1_1_fake_quant.onnx?download=1
+      - wget -O {{.BERT_DIR}}/vocab.txt https://zenodo.org/record/3733910/files/vocab.txt?download=1
+    status:
+      - test -f {{.APPS_DIR}}/mlperf/inference/language/bert/{{.BERT_DIR}}/model.onnx
+      - test -f {{.APPS_DIR}}/mlperf/inference/language/bert/{{.BERT_DIR}}/bert_large_v1_1_fake_quant.onnx
+      - test -f {{.APPS_DIR}}/mlperf/inference/language/bert/{{.BERT_DIR}}/vocab.txt
+
+  download-pytorch-bert-model:
+    deps: [download-bert-data]
+    # desc: Download pytorch model used by bert
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BERT_DIR: '{{default "build/data/bert_tf_v1_1_large_fp32_384_v2" .BERT_DIR}}'
+    cmds:
+      - wget -O {{.BERT_DIR}}/model.pytorch https://zenodo.org/record/3733896/files/model.pytorch?download=1
+      - wget -O {{.BERT_DIR}}/vocab.txt https://zenodo.org/record/3733896/files/vocab.txt?download=1
+    status:
+      - test -f {{.BERT_DIR}}/model.pytorch
+      - test -f {{.BERT_DIR}}/vocab.txt
+
+  download-tensorflow-bert-model:
+    deps: [download-bert-data]
+    # desc: Download tensorflow model used by bert
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BERT_DIR: '{{default "build/data/bert_tf_v1_1_large_fp32_384_v2" .BERT_DIR}}'
+    cmds:
+      - wget -O {{.BERT_DIR}}/model.ckpt-5474.data-00000-of-00001 https://zenodo.org/record/3733868/files/model.ckpt-5474.data-00000-of-00001?download=1
+      - wget -O {{.BERT_DIR}}/model.ckpt-5474.index https://zenodo.org/record/3733868/files/model.ckpt-5474.index?download=1
+      - wget -O {{.BERT_DIR}}/model.ckpt-5474.meta https://zenodo.org/record/3733868/files/model.ckpt-5474.meta?download=1
+      - wget -O {{.BERT_DIR}}/vocab.txt https://zenodo.org/record/3733868/files/vocab.txt?download=1
+      - wget -O {{.BERT_DIR}}/model.pb https://zenodo.org/record/3939747/files/model.pb?download=1
+    status:
+      - test -f {{.BERT_DIR}}/model.ckpt-5474.data-00000-of-00001
+      - test -f {{.BERT_DIR}}/model.ckpt-5474.index
+      - test -f {{.BERT_DIR}}/model.ckpt-5474.meta
+      - test -f {{.BERT_DIR}}/vocab.txt
+      - test -f {{.BERT_DIR}}/model.pb
+
+  postprocess-onnx-bert-model:
+    deps: [download-onnx-bert-model, build-mlperf-loadgen]
+    # desc: postprocess bert onnx model
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BERT_DIR: '{{default "build/data/bert_tf_v1_1_large_fp32_384_v2" .BERT_DIR}}'
+    cmds:
+      - python3 {{.ROOT_DIR}}/vendor/onnxruntime/tools/python/remove_initializer_from_input.py
+        --input {{.BERT_DIR}}/bert_large_v1_1_fake_quant.onnx --output {{.BERT_DIR}}/bert_large_v1_1_fake_quant_no_initializer.onnx
+      - mkdir -p {{.BERT_DIR}}/model_with_external_data || true
+      - python3 {{.APPS_DIR}}/mlperf/models/convert_to_external_data.py
+        --input {{.BERT_DIR}}/model.onnx --output {{.BERT_DIR}}/model_with_external_data/model.onnx
+        --external_data_fname model.onnx.external
+      - python3 {{.APPS_DIR}}/mlperf/models/convert_to_external_data.py
+        --input {{.BERT_DIR}}/bert_large_v1_1_fake_quant_no_initializer.onnx
+        --output {{.BERT_DIR}}/model_with_external_data/bert_large_v1_1_fake_quant.onnx
+        --external_data_fname bert_large_v1_1_fake_quant.onnx.external
+
+  run-bert-local:
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "local" .OUT_DIRNAME}}'
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+    cmds:
+      - CUDA_VISIBLE_DEVICES=1 python3 run.py --backend={{.BACKEND}}
+        --output {{.APPS_DIR}}/mlperf/output/bert-gpu/{{.BACKEND}}/{{.SCENARIO}}/{{.OUT_DIRNAME}}
+        --scenario {{.SCENARIO}} {{.CLI_ARGS}}
+
+  run-bert-onnxruntime-local:
+    deps: [download-onnx-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "local" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-local
+        vars:
+          SCENARIO: "{{.SCENARIO}}"
+          OUT_DIRNAME: "{{.OUT_DIRNAME}}"
+
+  run-bert-ava:
+    deps: [download-onnx-bert-model, download-bert-data, build-mlperf-loadgen]
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "ava" .OUT_DIRNAME}}'
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        python3 run.py --backend={{.BACKEND}} --scenario {{.SCENARIO}}
+        --output {{.APPS_DIR}}/mlperf/output/bert-gpu/{{.BACKEND}}/{{.SCENARIO}}/{{.OUT_DIRNAME}}
+        {{.CLI_ARGS}}
+
+  run-bert-onnxruntime-dump-debug:
+    deps: [download-onnx-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-onnxruntime-dump
+        vars: {BUILD: "debug", SPEC: "onnx_dump", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-onnxruntime-dump:
+    deps: [download-onnx-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "ava" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-ava
+        vars: {BACKEND: "onnxruntime", OUT_DIRNAME: "{{.OUT_DIRNAME}}", SCENARIO: "{{.SCENARIO}}", BUILD: "{{.BUILD}}", SPEC: "{{.SPEC}}"}
+
+  run-bert-onnxruntime-opt-debug:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-onnxruntime-dump
+        vars: {BUILD: "debug", SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-onnxruntime-opt:
+    # desc: run bert with loadgen using opt spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-onnxruntime-dump
+        vars: {BUILD: "release", SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-pytorch-local:
+    deps: [download-pytorch-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "ava" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-local
+        vars: {BACKEND: "pytorch", OUT_DIRNAME: "{{.OUT_DIRNAME}}", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-pytorch-dump:
+    deps: [download-pytorch-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "ava" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-ava
+        vars: {BACKEND: "pytorch", OUT_DIRNAME: "{{.OUT_DIRNAME}}", SCENARIO: "{{.SCENARIO}}", BUILD: "{{.BUILD}}", SPEC: "{{.SPEC}}"}
+
+  run-bert-pytorch-dump-debug:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-pytorch-dump
+        vars: {BUILD: "debug", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-pytorch-opt:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-pytorch-dump
+        vars: {SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-pytorch-opt-debug:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-pytorch-dump
+        vars: {BUILD: "debug", SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-tensorflow-local:
+    deps: [download-tensorflow-bert-model, download-bert-data]
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "local" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-local
+        vars:
+          SCENARIO: "{{.SCENARIO}}"
+          OUT_DIRNAME: "{{.OUT_DIRNAME}}"
+          BACKEND: "tf"
+
+  run-bert-tensorflow-dump:
+    deps: [download-tensorflow-bert-model, download-bert-data]
+    # desc: run bert with loadgen using dump spec and release build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      OUT_DIRNAME: '{{default "ava" .OUT_DIRNAME}}'
+    cmds:
+      - task: run-bert-ava
+        vars:
+          BACKEND: "tf"
+          OUT_DIRNAME: "{{.OUT_DIRNAME}}"
+          SCENARIO: "{{.SCENARIO}}"
+          BUILD: "{{.BUILD}}"
+          SPEC: "{{.SPEC}}"
+
+  run-bert-tensorflow-dump-debug:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-tensorflow-dump
+        vars: {BUILD: "debug", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-tensorflow-opt:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-tensorflow-dump
+        vars: {SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  run-bert-tensorflow-opt-debug:
+    # desc: run bert with loadgen using opt spec and debug build
+    dir: "{{.APPS_DIR}}/mlperf/inference/language/bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - task: run-bert-tensorflow-dump
+        vars: {BUILD: "debug", SPEC: "onnx_opt", SCENARIO: "{{.SCENARIO}}"}
+
+  download-3d-unet-kits19-model:
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/medical_imaging/3d-unet-kits19"
+    vars:
+      MODEL_DIR: '{{default "build/model" .MODEL_DIR}}'
+    cmds:
+      - mkdir -p {{.MODEL_DIR}}
+      - wget -O {{.MODEL_DIR}}/3dunet_kits19_128x128x128.onnx https://zenodo.org/record/4771141/files/3dunet_kits19_128x128x128.onnx?download=1
+      - wget -O {{.MODEL_DIR}}/3dunet_kits19_128x128x128_dynbatch.onnx https://zenodo.org/record/4771141/files/3dunet_kits19_128x128x128_dynbatch.onnx?download=1
+    status:
+      - test -f {{.MODEL_DIR}}/3dunet_kits19_128x128x128_dynbatch.onnx
+      - test -f {{.MODEL_DIR}}/3dunet_kits19_128x128x128.onnx
+
+  download-3d-unet-kits19-data:
+    # desc: download 3d unet kits19 data
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/medical_imaging/3d-unet-kits19"
+    cmds:
+      - rm -rf kits19_raw_data_dir
+      - mkdir -p kits19_raw_data_dir
+      - cd kits19_raw_data_dir && git clone https://github.com/neheller/kits19 && cd kits19 && pip3 install -r requirements.txt && python3 -m starter_code.get_imaging
+    status:
+      - test -f "kits19_raw_data_dir/kits19/data/case_00137/imaging.nii.gz"
+
+  setup-3d-unet-kits19:
+    # desc: preprocess 3d unet kits19
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/medical_imaging/3d-unet-kits19"
+    deps: [download-3d-unet-kits19-model, download-3d-unet-kits19-data]
+    vars:
+      DOWNLOAD_DATA_DIR: '{{default "kits19_raw_data_dir/kits19/data" .DOWNLOAD_DATA_DIR}}'
+    cmds:
+      - cp ../../../mlperf.conf build
+      - cd build && ln -sf ../{{.DOWNLOAD_DATA_DIR}} raw_data
+
+  preprocess-3d-unet-kits19:
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/medical_imaging/3d-unet-kits19"
+    deps: [setup-3d-unet-kits19]
+    vars:
+      RAW_DATA_DIR: '{{default "build/raw_data" .RAW_DATA_DIR}}'
+      PREPROCESSED_DATA_DIR: '{{default "build/preprocessed_data"}}'
+    cmds:
+      - python3 preprocess.py
+        --raw_data_dir {{.RAW_DATA_DIR}}
+        --results_dir {{.PREPROCESSED_DATA_DIR}} --mode preprocess
+    status:
+      - test -f {{.PREPROCESSED_DATA_DIR}}/case_00000.pkl
+
+  run-3d-unet-kits19-local:
+    # desc: run 3dunet with loadgen natively with onnxruntime
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/medical_imaging/3d-unet-kits19"
+    deps: [preprocess-3d-unet-kits19]
+    vars:
+      MODEL_DIR: '{{default "build/model" .MODEL_DIR}}'
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+      MODEL: '{{default "3dunet_kits19_128x128x128.onnx" .MODEL}}'
+    cmds:
+      - CUDA_VISIBLE_DEVICES=2 python3 run.py --backend={{.BACKEND}} --model {{.MODEL_DIR}}/{{.MODEL}}
+        {{.CLI_ARGS}}

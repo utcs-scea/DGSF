@@ -1,0 +1,52 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  build_test:
+    dir: "{{.APPS_DIR}}/migration_test"
+    cmds:
+      - pwd
+      - make indocker
+
+  run-ava:
+    desc: Launch test with ava remoting
+#    deps: [build_test]
+    dir: "{{.APPS_DIR}}/migration_test"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        AVA_GUEST_DUMP_DIR={{.APPS_DIR}}/migration_test/cuda_dumps
+        AVA_WORKER_DUMP_DIR={{.APPS_DIR}}/migration_test/cuda_dumps
+        AVA_REQUESTED_GPU_MEMORY=123
+        ./test -c
+
+  run-ava-dump-debug:
+    dir: "{{.APPS_DIR}}/migration_test"
+    cmds:
+      - task: run-ava
+        vars: {BUILD: "debug"}
+
+  run-ava-opt:
+    dir: "{{.APPS_DIR}}/migration_test"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt"}
+
+  run-ava-opt-debug:
+    dir: "{{.APPS_DIR}}/migration_test"
+    cmds:
+      - task: run-ava
+        vars: {SPEC: "onnx_opt", BUILD: "debug"}
+
+  run-local:
+    desc: Launch test locally, just for testing
+#    deps: [build_test]
+    dir: "{{.APPS_DIR}}/migration_test"
+    cmds:
+      - ./test

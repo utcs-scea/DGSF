@@ -1,0 +1,18 @@
+version: 1.0
+provider:
+  name: openfaas
+  gateway: http://127.0.0.1:8080
+functions:
+  face-identification:
+    lang: python3-dgsf
+    handler: ./face-identification
+    image: hfingler/dgsf:face-identification
+    secrets:
+      - private-docker-registry
+    environment:
+      AVA_WORKER_DUMP_DIR: /home/ubuntu/serverless-gpus/src/apps/mlperf/cuda_dumps/onnxruntime/
+      AVA_REQUESTED_GPU_MEMORY: 4000
+      read_timeout: 5m
+      exec_timeout: 5m
+      write_timeout: 5m
+

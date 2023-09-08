@@ -1,0 +1,105 @@
+##############################################################
+# Submission Instructions                                    #
+#                                                            #
+# Please follow these intructions so that the autograder     #
+# can compile and run your program and check the results.    #
+#                                                            #
+# For each implementation of kmeans (Sequential, Thrust,     #
+# CUDA, Alternatives), you need to specify values to         #
+# fields according to the following rules                    #
+#                                                            #
+# Compilation                                                #
+#                                                            #
+#   You need to specify how to compile your program and let  #
+#   the autograder know the name of the executable. These    #
+#   can be done using the following two fields               #
+#                                                            #
+#     How_To_Compile                                         #
+#     Executable                                             #
+#                                                            #
+#   Note:                                                    #
+#     - Your program will be run with -d dims automatically. #
+#       Make sure your program accepts -d dims as one of     #
+#       the command line arguements to specify the dimention #
+#       of the points.                                       #
+#     - The provided commands will be run in the top level   #
+#       directory of your submission directory. If you       #
+#       have sub dirs inside your submission directory,      #
+#       make sure the commands work at the top level dir.    #
+#     - Make sure to specify a one-line command to compile   #
+#       your program. If more than one line is needed, put   #
+#       all commands in a Makefile and specify make here.    #
+#                                                            #
+# Extra Flags                                                #
+#                                                            #
+#   By defaul, your program will be run with the following   #
+#   command line arguments                                   #
+#                                                            #
+#     -k nClusters -t thrshd -d dims -i iFile -m 200 -s seed #
+#                                                            #
+#   If your implementation requires additional argument, you #
+#   should specifiy the following field                      #
+#                                                            #
+#     Extra_Args                                             #
+#                                                            #
+#                                                            #
+# Implementation                                             #
+#                                                            #
+#   Do not delete any field under the section of your        #
+#   implementation. However, if you do not have any of       #
+#   the following implementations, you should delete         #
+#   the whole section corresponding to the unimplemented     #
+#   solution.                                                #
+#                                                            #
+# Comments                                                   #
+#                                                            #
+#   Anything after '#' through the rest of the line is       #
+#   comment, which is ignored by the autograder.             #
+#                                                            #
+##############################################################
+
+#
+# Specification for sequential implementation of kmeans
+#
+[Sequential]
+How_To_Compile: make
+Executable: ./bin/kmean
+Extra_Args: -r 1
+
+#
+# Specification for GPU implementation of kmeans
+# using Thrust
+#
+[Thrust]
+How_To_Compile: make
+Executable: ./bin/kmean
+Extra_Args: -r 2
+
+#
+# Specification for GPU implementation of kmeans
+# using CUDA
+#
+[CUDA basic]
+How_To_Compile: make
+Executable: ./bin/kmean
+Extra_Args: -r 3
+
+
+#
+# Specification for GPU implementation of kmeans
+# using Shared Memory
+#
+[CUDA shared]
+How_To_Compile: Imake
+Executable: ./bin/kmean
+Extra_Args: -r 4
+
+
+#
+# Specification for GPU implementation of kmeans
+# Alternatives
+#
+[Alternatives]
+How_To_Compile: 
+Executable:
+Extra_Args:

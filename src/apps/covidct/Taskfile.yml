@@ -1,0 +1,60 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  run-predict-ava:
+    deps: [extract-npy]
+    dir: "{{.APPS_DIR}}/covidct/refactored"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        USE_GPU=1 TF_INTRA_OP_PARALLELISM_THREADS=1 TF_INTER_OP_PARALLELISM_THREADS=1
+        python3 predict_tf.py
+
+  run-step2-ava:
+    deps: [extract-npy]
+    dir: "{{.APPS_DIR}}/covidct/refactored"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_dump" .SPEC}}'
+    cmds:
+      - AVA_CONFIG_FILE_PATH={{.TOOLS_DIR}}/ava.conf
+        LD_LIBRARY_PATH={{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/lib
+        USE_GPU=1 python3 step2.py
+
+  run-covidct-in-mem-ava:
+    #deps: [extract-npy]
+    dir: "{{.APPS_DIR}}/covidct/refactored"
+    cmds:
+      - python3 handler.py
+
+  run-covidct-in-mem:
+    #deps: [extract-npy]
+    dir: "{{.APPS_DIR}}/covidct/refactored"
+    cmds:
+      - CUDA_VISIBLE_DEVICES=0 RUN_NATIVE=1 python3 handler.py
+
+  download-dataset:
+    dir: "{{.APPS_DIR}}/covidct/refactored/input"
+    cmds:
+      - wget -O COVID-CT-MD.zip https://ndownloader.figshare.com/files/26069987
+      - unzip COVID-CT-MD.zip
+      - mv -- "Normal Cases" normal_cases
+      - mv -- "COVID-19 Cases" covid19_cases
+      - mv -- "Cap Cases" cap_cases
+    status:
+      - test -f COVID-CT-MD.zip
+
+  extract-npy:
+    deps: [download-dataset]
+    dir: "{{.APPS_DIR}}/covidct/refactored"
+    cmds:
+      - python3 step1.py --indir ./input/normal_cases/ --outdir ./output
+    status:
+      - test -f ./output/T_normal076_ct-pixels.npy

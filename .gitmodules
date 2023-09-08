@@ -1,0 +1,32 @@
+[submodule "vendor/ava"]
+	path = vendor/ava
+	url = git@github.com:utcs-scea/DGSF-AvA.git
+[submodule "src/apps/mlperf/inference"]
+	path = src/apps/mlperf/inference
+	url = https://github.com/photoszzt/inference.git
+	ignore = dirty
+[submodule "vendor/onnxruntime"]
+	path = vendor/onnxruntime
+	url = https://github.com/photoszzt/onnxruntime.git
+	branch = ava-r1.8.0
+[submodule "src/apps/dsb17/tpx-kaggle-dsb2017"]
+	path = src/apps/dsb17/tpx-kaggle-dsb2017
+	url = git@github.com:hfingler/tpx-kaggle-dsb2017.git
+[submodule "vendor/pytorch"]
+	path = vendor/pytorch
+	url = https://github.com/pytorch/pytorch.git
+[submodule "vendor/vision"]
+	path = vendor/vision
+	url = https://github.com/photoszzt/vision.git
+[submodule "vendor/tensorflow"]
+	path = vendor/tensorflow
+	url = https://github.com/photoszzt/tensorflow.git
+[submodule "vendor/tensorflow-cudart-dynam"]
+	path = vendor/tensorflow-cudart-dynam
+	url = https://github.com/yuhc/tensorflow-cudart-dynam.git
+[submodule "vendor/cupy"]
+	path = vendor/cupy
+	url = https://github.com/photoszzt/cupy.git
+[submodule "vendor/altis"]
+	path = vendor/altis
+	url = git@github.com:hfingler/altis.git

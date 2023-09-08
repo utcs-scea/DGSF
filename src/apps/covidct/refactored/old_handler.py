@@ -1,0 +1,1 @@
+../../faas_covidct/handler.py
