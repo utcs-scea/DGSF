@@ -1,0 +1,11 @@
+---
+maxcount:
+    max: 10000
+    reuse: true
+    deploy_min: true
+    no_vm_scaleup: false
+watermark:
+    low: 0
+    high: 9
+    reuse: true
+---

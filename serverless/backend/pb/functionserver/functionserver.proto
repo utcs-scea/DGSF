@@ -1,0 +1,39 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.functionserver";
+option java_outer_classname = "FunctionServerProto";
+option go_package = "./;functionserver";
+
+package functionserver;
+
+service Function {
+	// Asks the fnserver to create ONE replica
+	rpc CreateReplica(CreateRequest) returns (CreateReply) {}
+	rpc ReleaseVMSetup(ReleaseRequest) returns (google.protobuf.Empty) {}
+}
+
+message CreateRequest {
+	string kernelImagePath = 4;
+	string kernelArgs = 5;
+	string initrdPath = 17;
+	string imageName = 6;
+	string imageStoragePrefix = 7;
+	string inetDev = 8;
+	string nameServer = 9;
+	string awsAccessKeyID = 10;
+	string awsSecretAccessKey = 11;
+	int64 cpu = 13;
+	int64 mem = 14;
+	uint32 numReplica = 15;
+	string vmType = 16;
+}
+
+message CreateReply {
+	string ip = 1;
+	string vmid = 2;
+}
+
+message ReleaseRequest {
+	string vmid = 1;
+}

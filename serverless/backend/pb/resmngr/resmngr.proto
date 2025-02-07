@@ -1,0 +1,54 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+option go_package = "./;resmngr";
+package resmngr;
+
+service ResMngrService {
+	// A VM updating its status
+	rpc UpdateStatus(StatusUpdateRequest) returns (StatusUpdateReply) {}
+	// FCDaemon register itself to resource manager
+	rpc RegisterFunctionNode(RegisterFunctionNodeRequest) returns (google.protobuf.Empty) {}
+	rpc RegisterGPUNode(RegisterGPUNodeRequest) returns (RegisterGPUNodeResponse) {}
+	rpc AddGPUWorker(AddGPUWorkerRequest) returns (AddGPUWorkerResponse) {}
+}
+
+// Firecracker will update the RM with its status on start/finish
+message StatusUpdateRequest {
+	string vmid   = 1;
+	enum Status {
+		READY = 0;
+		FINISHED = 1;
+	}
+	Status status = 2;
+}
+
+// Reply has action, such as self-destroy or stay alive
+message StatusUpdateReply {
+	enum Action {
+		DESTROY = 0;
+		KEEP_ALIVE = 1;
+		OK = 2;
+	}
+	Action action = 1;
+}
+
+message RegisterFunctionNodeRequest {
+	string ip = 1;
+	uint32 port = 4;
+	string node_id = 5;
+}
+
+message RegisterGPUNodeRequest {
+}
+
+message RegisterGPUNodeResponse {
+	string uuid = 1;
+}
+
+message AddGPUWorkerRequest {
+	string uuid = 1;
+	uint32 workers = 2;
+}
+
+message AddGPUWorkerResponse {
+}

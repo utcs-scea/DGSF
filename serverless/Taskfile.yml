@@ -1,0 +1,265 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default: task --list
+
+  backend-submodules:
+    dir: "{{.SERVERLESS_DIR}}/backend"
+    cmds:
+      - git submodule update --init --rebase {{.SERVERLESS_DIR}}/backend/third_party/firecracker-go-sdk
+    status:
+      - test -d {{.SERVERLESS_DIR}}/backend/third_party/firecracker-go-sdk
+
+  build-backend:
+    desc: Build the two parts of the backend (resmngr and functionserver)
+    deps: [backend-submodules]
+    dir: "{{.SERVERLESS_DIR}}/backend"
+    cmds:
+      - go mod tidy
+      - make
+      - task: install-backend
+    status:
+      - test -f {{.BUILD_DIR}}/serverless/functionserver
+
+  install-backend:
+    dir: "{{.SERVERLESS_DIR}}/backend"
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}/serverless
+      - cp start_backend.sh {{.BUILD_DIR}}/serverless
+      - cp resmngr functionserver {{.BUILD_DIR}}/serverless/
+      - mkdir -p {{.BUILD_DIR}}/serverless/faas/
+      - cp reset_and_launch_stack.sh deploy_stack.sh docker-compose-osv.yml {{.BUILD_DIR}}/serverless/faas/
+      - cp -r ../tools/network {{.BUILD_DIR}}/serverless/
+      - "{{.SERVERLESS_DIR}}/tools/gen_default_dotenv.sh"
+      - cp -n {{.SERVERLESS_DIR}}/tools/dotenv {{.BUILD_DIR}}/serverless/dotenv
+      - cp -n {{.SERVERLESS_DIR}}/tools/with_env.sh {{.BUILD_DIR}}/serverless/with_env.sh
+      - cp -n {{.SERVERLESS_DIR}}/backend/policies.yaml {{.BUILD_DIR}}/serverless/policies.yaml
+      - echo "Output default .env to {{.BUILD_DIR}}/serverless, change it as necessary"
+
+  launch-backend-containers:
+    desc: "Launches the backend containers that we need. TODO: set as dependency."
+    dir: "{{.BUILD_DIR}}/serverless/"
+    cmds:
+      - . ./with_env.sh && cd ./faas && ./reset_and_launch_stack.sh
+
+  setup-backend-networking:
+    dir: "{{.BUILD_DIR}}/serverless/network"
+    cmds:
+      - ./setup.sh
+
+  launch-resmngr:
+    deps: [build-backend]
+    desc: launches the (single) resource manager of the backend
+    dir: "{{.BUILD_DIR}}/serverless"
+    cmds:
+    #load dotenv and launch
+      - . ./with_env.sh && ./start_backend.sh
+    #preconditions:
+    #  - sh: "python3 {{.SERVERLESS_DIR}}/tools/storage/check_redis_running.py"
+    #    msg: "Redis is not running or can't connect to it. Run task launch-redis"
+
+  launch-fn-server:
+    deps: [build-backend]
+    desc: launches a function server
+    dir: "{{.BUILD_DIR}}/serverless"
+    cmds:
+      - task: setup-backend-networking
+      #load dotenv and launch
+      - . ./with_env.sh && sudo -E ./functionserver
+  
+  gdb-gpu-server:
+    desc: launches a function server
+    dir: "{{.BUILD_DIR}}/serverless"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      MANAGER_PORT_BASE: '{{default "43100" .MANAGER_PORT_BASE}}'
+      WORKER_PORT_BASE: '{{default "43200" .WORKER_PORT_BASE}}'
+    cmds:
+      - RESMNGR_ADDR=128.83.122.71
+        RESMNGR_PORT=60082
+        FUNCTIONSERVER_PORT=60081
+        FUNCTIONPROXY_PORT=60080
+        AVAMNGR_PORT=60083
+        LOG_LEVEL=debug
+        GPU_WORKERS=8
+        gdb --args {{.BUILD_DIR}}/ava/{{.BUILD}}/svgpu_manager
+        --worker_path {{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/bin/worker
+        --manager_port {{.MANAGER_PORT_BASE}}
+        --worker_port_base {{.WORKER_PORT_BASE}}
+        --worker_env LD_LIBRARY_PATH=/usr/local/cuda/nvvm/lib64 {{.CLI_ARGS}}
+        --ngpus 2
+        --gpuoffset 0
+        --allctx yes
+        --reporting yes
+        --debug_migration 3 2>&1
+   
+  launch-gpu-server:
+    desc: launches a function server
+    dir: "{{.BUILD_DIR}}/serverless"
+    vars:
+      BUILD: '{{default "release" .BUILD}}'
+      SPEC: '{{default "onnx_opt" .SPEC}}'
+      MANAGER_PORT_BASE: '{{default "43100" .MANAGER_PORT_BASE}}'
+      WORKER_PORT_BASE: '{{default "43200" .WORKER_PORT_BASE}}'
+    cmds:
+      #load dotenv and launch
+      - . ./with_env.sh && {{.BUILD_DIR}}/ava/{{.BUILD}}/svgpu_manager
+        --worker_path {{.BUILD_DIR}}/ava/{{.BUILD}}/{{.SPEC}}/bin/worker
+        --manager_port {{.MANAGER_PORT_BASE}}
+        --worker_port_base {{.WORKER_PORT_BASE}}
+        --worker_env LD_LIBRARY_PATH=/usr/local/cuda/nvvm/lib64 {{.CLI_ARGS}}
+
+  launch-redis:
+    desc: Launches a redis-server instance, required for the faas backend to run.
+    dir: "{{.SERVERLESS_DIR}}/tools/storage"
+    cmds:
+      - ./run_redis.sh
+
+  build-vm-webserver:
+    dir: "{{.SERVERLESS_DIR}}/vm_webserver"
+    cmds:
+      - cp {{.SERVERLESS_DIR}}/backend/pb/resmngr/resmngr.proto  ./proto/resmngr/resource_manager.proto
+      - make
+      - mkdir -p {{.BUILD_DIR}}/serverless/linux
+      - cp server {{.BUILD_DIR}}/serverless/linux
+      - cp forkserver.py {{.BUILD_DIR}}/serverless/linux
+    status:
+      - test -f {{.BUILD_DIR}}/serverless/linux/server
+
+  build-basic-linux-image:
+    dir: "{{.SERVERLESS_DIR}}/base-linux-image"
+    deps: [build-vm-webserver]
+    cmds:
+      - SERVER_BIN="{{.BUILD_DIR}}/serverless/linux/server"
+        FORKSERVER="{{.BUILD_DIR}}/serverless/linux/forkserver.py"
+        PYIOWRAPPER="{{.SERVERLESS_DIR}}/py_iowrapper"
+        ./build_base_image.sh
+    status:
+      - test -f {{.SERVERLESS_DIR}}/base-linux-image/output/image.ext4
+
+  build-base-linux:
+    desc: "Builds the base ubuntu image used by functions"
+    #deps: [build-basic-linux-image]
+    dir: "{{.SERVERLESS_DIR}}/base-linux-image"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      - SERVER_BIN="{{.BUILD_DIR}}/serverless/linux/server"
+        FORKSERVER="{{.BUILD_DIR}}/serverless/linux/forkserver.py"
+        PYIOWRAPPER="{{.SERVERLESS_DIR}}/py_iowrapper"
+        AVA_GUESTLIB="{{.BUILD_DIR}}/ava/{{.BUILD}}/onnx_opt"
+        ./setup_linux_for_faas.sh "{{.BUILD_DIR}}/serverless/images"
+
+  build-app-image:
+    desc: "Builds the VM image for an app. Run with no arguments for help."
+    dir: "{{.SERVERLESS_DIR}}/tools/functions"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      #- cmd: echo "Pass arguments after --. for example  task <task> -- appname"
+      #  silent: true
+      #- task: build-base-linux
+      #  vars:
+      #    BUILD: "{{.BUILD}}"
+      - python3 build_function_image.py {{.BUILD_DIR}}/serverless/images {{.CLI_ARGS}}
+
+  update-app-guestlib:
+    desc: "Updates the vm's guestlib"
+    dir: "{{.SERVERLESS_DIR}}/tools/functions"
+    vars:
+      BUILD: '{{default "debug" .BUILD}}'
+    cmds:
+      - cmd: echo "Pass arguments after --. for example  task <task> -- --name appname"
+        silent: true
+      - python3 update_ava_guestlib.py --imgdir {{.BUILD_DIR}}/serverless/images
+        --guestlibpath {{.BUILD_DIR}}/ava/{{.BUILD}}/onnx_opt/lib/libguestlib.so {{.CLI_ARGS}}
+
+  deploy-function:
+    desc: "Launches an existing app image to the backend. Run with no arguments for help."
+    dir: "{{.SERVERLESS_DIR}}/tools/functions"
+    cmds:
+      - cmd: echo "Pass arguments after --. for example  task <task> -- appname gpu_memory_required"
+        silent: true
+      - python3 gen_yaml_and_deploy.py {{.BUILD_DIR}}/serverless/images {{.CLI_ARGS}}
+
+  invoke-function:
+    desc: "Invokes a function that was already deployed, takes a json file as paramter."
+    dir: "{{.SERVERLESS_DIR}}/resources/inputs"
+    cmds:
+      - cmd: echo "Pass arguments after --. for example  task serverless:invoke-function -- fn_name input_json (from serverless/resources/inputs)"
+        silent: true
+      - "{{.SERVERLESS_DIR}}/tools/functions/run_function.sh {{.CLI_ARGS}}"
+
+  invoke-faas-classification-detection:
+    dir: "{{.APPS_DIR}}/mlperf/inference/vision/classification_and_detection"
+    vars:
+      BATCH_SIZE: '{{default "16" .BATCH_SIZE}}'
+      MODEL: '{{default "resnet50" .MODEL}}'
+      BACKEND: '{{default "onnxruntime" .BACKEND}}'
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      DATASET_PATH: '{{default "../../../data/ILSVRC2012_img_val" .DATASET_PATH}}'
+    cmds:
+      - python3 python/main_faas.py
+        --profile {{.MODEL}}-{{.BACKEND}}
+        --scenario {{.SCENARIO}}
+        --dataset-path {{.DATASET_PATH}}
+        --max-batchsize {{.BATCH_SIZE}}
+        {{.CLI_ARGS}}
+
+  invoke-faas-resnet50:
+    desc: "Invoke resnet50-onnxruntime faas function"
+    dir: "{{.APPS_DIR}}/faas_classification_detection"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+    cmds:
+      - cd ../mlperf/inference/vision/classification_and_detection/ && 
+        python3 python/generate_preprocessed.py
+        --dataset-path ../../../data/ILSVRC2012_img_val
+        --dataset imagenet --data-format NCHW
+      - python3 invoke.py {{.CLI_ARGS}}
+      # - task: invoke-faas-classification-detection
+      #   vars:
+      #     SCENARIO: "{{.SCENARIO}}"
+      #     CLI_ARGS: "{{.CLI_ARGS}}"
+
+  invoke-faas-bert:
+    desc: "Invoke bert-onnxrutnime faas function"
+    dir: "{{.APPS_DIR}}/faas_bert"
+    vars:
+      SCENARIO: '{{default "Offline" .SCENARIO}}'
+      BATCH_SIZE: '{{default "16" .BATCH_SIZE}}'
+    cmds:
+      - python3 invoke.py {{.CLI_ARGS}}
+      # - python3 run_faas.py --scenario {{.SCENARIO}}
+      #   --batchsize {{.BATCH_SIZE}}
+      #   {{.CLI_ARGS}}
+
+  invoke-faas-face-id:
+    desc: "Invoke face identification faas function"
+    dir: "{{.APPS_DIR}}/faas_face_id_client"
+    vars:
+      BATCH_SIZE: '{{default "16" .BATCH_SIZE}}'
+    cmds:
+      - python3 invoke.py --batchsize {{.BATCH_SIZE}}
+        --pairs-list ./input_data/pairs.txt
+        --dataset-path ./input_data/lfw_faces
+        {{.CLI_ARGS}}
+
+  invoke-faas-face-det:
+    desc: "Invoke face detection faas function"
+    dir: "{{.APPS_DIR}}/faas_face_det_client"
+    cmds:
+      - python3 invoke.py --imglist ./data/wider_val.txt {{.CLI_ARGS}}
+
+  invoke-faas-covidct:
+    desc: "Invoke covidct faas function"
+    dir: "{{.APPS_DIR}}/faas_covidct"
+    vars:
+      BATCH_SIZE: '{{default "16" .BATCH_SIZE}}'
+    cmds:
+      - python3 invoke.py --batchsize {{.BATCH_SIZE}}
+        --plist ../covidct/refactored/input/patient_list.txt
+        {{.CLI_ARGS}}

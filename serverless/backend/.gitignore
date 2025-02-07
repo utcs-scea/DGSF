@@ -1,0 +1,15 @@
+.idea
+.vscode
+examples/
+dist
+/fcdaemon
+/functionserver
+/alouatta
+/resmngr
+/cpuhog
+dive.log
+deployment/k8s/yaml/gateway-dep.yml
+go.sum
+galvanic.yaml
+*.txt*
+pb/**/*.pb.go
